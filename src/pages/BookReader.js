@@ -63,7 +63,7 @@ function BookReader() {
       
       try {
         // First, fetch basic book information to get total pages
-        const response = await fetch(`http://localhost:3001/api/read/${id}?page=0`);
+        const response = await fetch(`/api/read/${id}?page=0`);
         if (!response.ok) {
           throw new Error(`Error fetching book: ${response.status}`);
         }
@@ -126,7 +126,7 @@ function BookReader() {
   // Helper function to fetch and store a page's content
   const fetchAndStorePageContent = async (pageNum, contentStore) => {
     try {
-      const response = await fetch(`http://localhost:3001/api/read/${id}?page=${pageNum}`);
+      const response = await fetch(`/api/read/${id}?page=${pageNum}`);
       if (!response.ok) {
         console.warn(`Warning: Failed to fetch page ${pageNum}: ${response.status}`);
         return null;
@@ -343,7 +343,7 @@ function BookReader() {
       
       console.log(`Generating music for page ${pageNum}, text length: ${formattedText.length}`);
       
-      const response = await fetch('http://localhost:3001/api/generate-music', {
+      const response = await fetch('/api/generate-music', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -423,7 +423,7 @@ function BookReader() {
         console.log(`Fetching content for page ${pageToGenerate} before generating music`);
         
         // Direct fetch instead of using fetchPage to avoid state timing issues
-        const response = await fetch(`http://localhost:3001/api/read/${id}?page=${pageToGenerate}`);
+        const response = await fetch(`/api/read/${id}?page=${pageToGenerate}`);
         
         if (!response.ok) {
           throw new Error(`Error fetching page ${pageToGenerate}: ${response.status}`);
@@ -485,7 +485,7 @@ function BookReader() {
       
       setError(null);
       
-      const response = await fetch(`http://localhost:3001/api/read/${id}?page=${pageNum}`);
+      const response = await fetch(`/api/read/${id}?page=${pageNum}`);
       if (!response.ok) {
         throw new Error(`Error: ${response.status}`);
       }
