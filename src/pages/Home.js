@@ -45,7 +45,7 @@ function Home() {
       setLoading(true);
       setError(null);
       const response = await fetch(
-        `http://localhost:3001/api/books?search=${encodeURIComponent(searchQuery)}&page=${pageNum}`
+        `/api/books?search=${encodeURIComponent(searchQuery)}&page=${pageNum}`
       );
       
       if (!response.ok) {
