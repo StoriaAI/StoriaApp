@@ -1,9 +1,17 @@
 {
   "version": 2,
   "functions": {
-    "api/**/*.js": {
+    "api/books.js": {
       "memory": 1024,
       "maxDuration": 10
+    },
+    "api/read.js": {
+      "memory": 1024,
+      "maxDuration": 10
+    },
+    "api/generate-music.js": {
+      "memory": 3008,
+      "maxDuration": 60
     }
   },
   "rewrites": [

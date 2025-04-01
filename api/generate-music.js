@@ -13,30 +13,40 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: 'Text content is required to generate music.' });
     }
 
-    console.log('Received text for music generation:', text);
+    console.log('Received text for music generation:', text.substring(0, 100) + '...');
+
+    // Set a timeout to handle long-running operations
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('Operation timed out'));
+      }, 60000); // 50 seconds timeout (Vercel has a 60 sec limit)
+    });
 
     // OpenAI API call to generate ambiance prompt
-    const openaiResponse = await axios.post(process.env.OPENAI_API_ENDPOINT || 'https://api.openai.com/v1/chat/completions', {
+    const openaiPromise = axios.post(process.env.OPENAI_API_ENDPOINT || 'https://api.openai.com/v1/chat/completions', {
       model: 'gpt-4',
       messages: [
         { 
           role: 'system', 
           content: `You are an expert at analyzing text and extracting emotional mood and setting details.
-          Analyze the provided text and extract:
-          1. The dominant emotional mood (e.g., joyful, tense, melancholic, peaceful)
-          2. The setting or environment described (e.g., forest, urban, ocean, space)
-          3. Any notable ambient sounds that would be present in this scene
-          4. A concise prompt (max 100 words) for generating background ambiance that combines
-          subtle music and soundscape elements matching the mood and setting, make sure do not include vocals, it has to be a ambiance background music generation prompt`
+          Create a concise prompt (max 50 words) for generating background ambiance music that matches the emotional mood and setting of the text. Focus on:
+          - The dominant emotional mood (e.g., joyful, tense, melancholic)
+          - The setting or environment if described 
+          - Key ambient elements
+          - NO vocals, instrumental only`
         },
-        { role: 'user', content: text }
-      ]
+        { role: 'user', content: text.substring(0, 800) } // Limit text to reduce tokens
+      ],
+      max_tokens: 150 // Limit response size
     }, {
       headers: {
         'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
         'Content-Type': 'application/json'
       }
     });
+
+    // Race the promises to handle timeouts
+    const openaiResponse = await Promise.race([openaiPromise, timeoutPromise]);
 
     if (!openaiResponse.data.choices || !openaiResponse.data.choices[0]) {
       console.error('Invalid response from OpenAI:', openaiResponse.data);
@@ -45,31 +55,19 @@ module.exports = async (req, res) => {
 
     const ambiancePrompt = openaiResponse.data.choices[0].message.content;
     console.log('Generated ambiance prompt:', ambiancePrompt);
-
-    // Extract just the concise prompt part (part 4) for ElevenLabs
-    let elevenLabsPrompt = ambiancePrompt;
-    const promptRegex = /4\.\s*(?:A\s*)?(?:concise\s*)?prompt[^:]*:(.*?)(?:\d+\.|$)/si;
-    const promptMatch = ambiancePrompt.match(promptRegex);
     
-    if (promptMatch && promptMatch[1]) {
-      elevenLabsPrompt = promptMatch[1].trim();
-    }
-    
-    // Ensure it doesn't exceed ElevenLabs character limit (450 characters max)
-    if (elevenLabsPrompt.length > 450) {
-      elevenLabsPrompt = elevenLabsPrompt.slice(0, 447) + '...';
+    // Ensure it doesn't exceed ElevenLabs character limit (200 characters max to speed up generation)
+    let elevenLabsPrompt = ambiancePrompt.trim();
+    if (elevenLabsPrompt.length > 200) {
+      elevenLabsPrompt = elevenLabsPrompt.slice(0, 197) + '...';
     }
     
     console.log('ElevenLabs prompt:', elevenLabsPrompt);
-    console.log('ElevenLabs prompt length:', elevenLabsPrompt.length);
-
-    // Log ElevenLabs API request details (excluding API key)
-    console.log('Making ElevenLabs API request with prompt:', elevenLabsPrompt);
     
     // ElevenLabs API call to generate music
     try {
       const elevenlabsEndpoint = process.env.ELEVENLABS_API_ENDPOINT || 'https://api.elevenlabs.io/v1/sound-generation';
-      const elevenLabsResponse = await axios.post(elevenlabsEndpoint, {
+      const elevenlabsPromise = axios.post(elevenlabsEndpoint, {
         text: elevenLabsPrompt
       }, {
         headers: {
@@ -77,10 +75,14 @@ module.exports = async (req, res) => {
           'Content-Type': 'application/json'
         },
         responseType: 'arraybuffer',
+        timeout: 40000, // 40 second timeout for axios
         validateStatus: function (status) {
           return status < 500; // Resolve only if the status code is less than 500
         }
       });
+
+      // Race with timeout
+      const elevenLabsResponse = await Promise.race([elevenlabsPromise, timeoutPromise]);
 
       if (elevenLabsResponse.status !== 200) {
         // Convert arraybuffer to string if there's an error
@@ -110,22 +112,25 @@ module.exports = async (req, res) => {
         message: elevenlabsError.message,
         response: elevenlabsError.response ? {
           status: elevenlabsError.response.status,
-          statusText: elevenlabsError.response.statusText,
-          data: elevenlabsError.response.data
+          statusText: elevenlabsError.response.statusText
         } : 'No response data'
       });
-      throw new Error(`Failed to generate music: ${elevenlabsError.message}`);
+      
+      // Return a fallback music URL
+      res.status(200).json({ 
+        musicUrl: 'https://dl.espressif.com/dl/audio/ff-16b-2c-44100hz.mp3',
+        fallback: true,
+        error: elevenlabsError.message
+      });
     }
   } catch (error) {
     console.error('Error in music generation process:', error.message);
-    res.status(500).json({ 
-      error: 'Failed to generate music', 
-      details: error.message,
-      response: error.response ? {
-        status: error.response.status,
-        statusText: error.response.statusText,
-        data: error.response.data
-      } : null
+    
+    // Return a fallback music URL instead of an error
+    res.status(200).json({ 
+      musicUrl: 'https://dl.espressif.com/dl/audio/ff-16b-2c-44100hz.mp3',
+      fallback: true,
+      error: error.message
     });
   }
 }; 
