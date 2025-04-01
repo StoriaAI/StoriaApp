@@ -44,15 +44,21 @@ function Home() {
     try {
       setLoading(true);
       setError(null);
+      console.log(`Fetching books from: /api/books?search=${encodeURIComponent(searchQuery)}&page=${pageNum}`);
+      
       const response = await fetch(
         `/api/books?search=${encodeURIComponent(searchQuery)}&page=${pageNum}`
       );
+      
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries([...response.headers.entries()]));
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const data = await response.json();
+      console.log('Response data:', data);
       
       if (!data.results || !Array.isArray(data.results)) {
         throw new Error('Invalid data format received from server');
@@ -62,7 +68,7 @@ function Home() {
       setPage(pageNum);
     } catch (error) {
       console.error('Error fetching books:', error);
-      setError('Failed to fetch books. Please try again later.');
+      setError(`Failed to fetch books: ${error.message}`);
       setBooks([]);
     } finally {
       setLoading(false);
