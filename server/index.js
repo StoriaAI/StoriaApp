@@ -269,7 +269,7 @@ app.post('/api/generate-music', async (req, res) => {
           2. The setting or environment described (e.g., forest, urban, ocean, space)
           3. Any notable ambient sounds that would be present in this scene
           4. A concise prompt (max 100 words) for generating background ambiance that combines
-          subtle music and soundscape elements matching the mood and setting`
+          subtle music and soundscape elements matching the mood and setting, make sure do not include vocals, it has to be a ambiance background music generation prompt`
         },
         { role: 'user', content: text }
       ]
