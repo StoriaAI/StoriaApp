@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 // Use only environment variables without hardcoded fallbacks for security
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
 const supabaseKey = process.env.REACT_APP_SUPABASE_PUBLIC_KEY;
+const vercelUrl = process.env.REACT_APP_VERCEL_URL || process.env.VERCEL_URL;
+const isProduction = process.env.NODE_ENV === 'production';
 
 // Validate environment variables are set
 if (!supabaseUrl || !supabaseKey) {
@@ -37,10 +39,24 @@ export const signIn = async (email, password) => {
 };
 
 export const signInWithGoogle = async () => {
+  // Determine the correct redirect URL based on environment
+  let redirectUrl = window.location.origin;
+  
+  // In production, if we have a Vercel URL, use it instead of window.location.origin
+  // This ensures we don't redirect to localhost in production
+  if (isProduction && vercelUrl) {
+    redirectUrl = vercelUrl.startsWith('http') 
+      ? vercelUrl 
+      : `https://${vercelUrl}`;
+    console.log('Using Vercel URL for redirect:', redirectUrl);
+  } else {
+    console.log('Using origin for redirect:', redirectUrl);
+  }
+  
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: window.location.origin,
+      redirectTo: redirectUrl,
       skipBrowserRedirect: false, // Ensure browser redirect happens
     }
   });

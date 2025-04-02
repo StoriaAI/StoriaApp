@@ -101,7 +101,7 @@ const HandleOAuthRedirect = () => {
   useEffect(() => {
     // Check if there's a hash in the URL (common for OAuth redirects)
     if (location.hash || location.search) {
-      console.log('Detected potential auth redirect. Running debug...');
+      console.log('Detected potential auth redirect in HandleOAuthRedirect component');
       
       // Run our debug helper
       debugAuth().then(() => {
@@ -112,7 +112,7 @@ const HandleOAuthRedirect = () => {
           if (error) {
             console.error('Failed to handle hash redirect:', error);
           } else if (data) {
-            console.log('Successfully handled hash redirect!');
+            console.log('Successfully handled hash redirect in HandleOAuthRedirect component!');
             
             // Clear the URL
             window.history.replaceState(null, '', window.location.pathname);

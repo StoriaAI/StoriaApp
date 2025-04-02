@@ -41,8 +41,17 @@ JWT_SECRET=your_jwt_secret
 
 # Vercel specific settings
 VERCEL_URL=your-vercel-app.vercel.app
+REACT_APP_VERCEL_URL=https://your-vercel-app.vercel.app
 VERCEL_ENV=production
 ```
+
+## Important Note for Google Authentication
+
+For Google authentication to work correctly in production:
+
+1. Make sure `REACT_APP_VERCEL_URL` is set to your full Vercel URL including `https://`
+2. This ensures OAuth redirects point to your production URL and not localhost
+3. In your Google Cloud Console OAuth settings, add both your local development URL and your Vercel production URL as authorized redirect URIs
 
 ## Environment Variables Usage
 
@@ -54,6 +63,7 @@ React can only access environment variables prefixed with `REACT_APP_`:
 // Correct usage in frontend code
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
 const supabaseKey = process.env.REACT_APP_SUPABASE_PUBLIC_KEY;
+const vercelUrl = process.env.REACT_APP_VERCEL_URL; // For OAuth redirects
 ```
 
 ### Backend (Node.js)

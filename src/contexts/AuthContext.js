@@ -37,34 +37,35 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Define the OAuth redirect handler function
+  const handleOAuthRedirects = async () => {
+    // Check for URL hash from OAuth redirects
+    if (window.location.hash) {
+      console.log('Found hash in URL, processing OAuth redirect');
+      try {
+        // This will attempt to set the session if the hash contains valid auth data
+        const { data, error } = await supabase.auth.getSessionFromUrl();
+        
+        if (error) {
+          console.error('Error processing OAuth redirect:', error);
+        } else if (data?.session) {
+          console.log('Successfully processed OAuth session');
+          setUser(data.session.user);
+          
+          // Check if the user needs onboarding
+          await checkOnboardingStatus(data.session.user.id);
+          
+          // Remove the hash from the URL without reloading
+          window.history.replaceState(null, '', window.location.pathname);
+        }
+      } catch (err) {
+        console.error('Exception processing OAuth redirect:', err);
+      }
+    }
+  };
+
   // Handle any OAuth redirects that might be in the URL
   useEffect(() => {
-    const handleOAuthRedirects = async () => {
-      // Check for URL hash from OAuth redirects
-      if (window.location.hash) {
-        console.log('Found hash in URL, processing OAuth redirect');
-        try {
-          // This will attempt to set the session if the hash contains valid auth data
-          const { data, error } = await supabase.auth.getSessionFromUrl();
-          
-          if (error) {
-            console.error('Error processing OAuth redirect:', error);
-          } else if (data?.session) {
-            console.log('Successfully processed OAuth session');
-            setUser(data.session.user);
-            
-            // Check if the user needs onboarding
-            await checkOnboardingStatus(data.session.user.id);
-            
-            // Remove the hash from the URL without reloading
-            window.history.replaceState(null, '', window.location.pathname);
-          }
-        } catch (err) {
-          console.error('Exception processing OAuth redirect:', err);
-        }
-      }
-    };
-    
     handleOAuthRedirects();
   }, []);
 
