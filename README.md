@@ -41,16 +41,10 @@ StoriaApp is an interactive book reader application that enhances reading by gen
    npm install
    ```
 
-3. Create a `.env` file in the root directory with the following variables:
-   ```
-   OPENAI_API_KEY=your_openai_api_key
-   ELEVENLABS_API_KEY=your_elevenlabs_api_key
-   PORT=3001
-   NODE_ENV=development
-   ELEVENLABS_API_ENDPOINT=https://api.elevenlabs.io/v1/sound-generation
-   OPENAI_API_ENDPOINT=https://api.openai.com/v1/chat/completions
-   GUTENBERG_API_ENDPOINT=https://gutendex.com/
-   ```
+3. Set up environment variables:
+   - Create a `.env` file in the root directory following the example in `.env.example`
+   - See [ENV_SETUP.md](ENV_SETUP.md) for detailed environment variable instructions
+   - **Important**: Storia uses a single `.env` file in the root directory for all environment variables
 
 4. Start the development server:
    ```
@@ -66,53 +60,11 @@ StoriaApp is an interactive book reader application that enhances reading by gen
 
 ## Deploying to Vercel
 
-### Prerequisites
+See the [VERCEL_DEPLOYMENT.md](VERCEL_DEPLOYMENT.md) guide for detailed deployment instructions.
 
-1. Create a [Vercel account](https://vercel.com/signup) if you don't have one
-2. Install the Vercel CLI:
-   ```
-   npm install -g vercel
-   ```
+## Troubleshooting
 
-### Deployment Steps
-
-1. Login to Vercel:
-   ```
-   vercel login
-   ```
-
-2. Set up your Environment Variables in Vercel:
-   - Go to your Vercel dashboard
-   - Select your project
-   - Navigate to Settings > Environment Variables
-   - Add the following environment variables:
-     - `OPENAI_API_KEY`
-     - `ELEVENLABS_API_KEY`
-     - `ELEVENLABS_API_ENDPOINT`
-     - `OPENAI_API_ENDPOINT`
-     - `GUTENBERG_API_ENDPOINT`
-
-3. Deploy your application:
-   ```
-   vercel
-   ```
-
-4. For production deployment:
-   ```
-   vercel --prod
-   ```
-
-### Vercel Configuration
-
-The application includes a `vercel.json` file that configures:
-- Build settings
-- API routes
-- Environment variables
-
-When deploying, Vercel will automatically:
-1. Build the React frontend
-2. Deploy the serverless API functions
-3. Set up the proper routing for both frontend and API endpoints
+For Google authentication issues, see [GOOGLE_AUTH_TROUBLESHOOTING.md](GOOGLE_AUTH_TROUBLESHOOTING.md).
 
 ## License
 

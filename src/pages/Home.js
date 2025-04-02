@@ -114,7 +114,7 @@ function Home() {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ px: isMobile ? 2 : 3 }}>
+    <Container maxWidth="lg" sx={{ px: isMobile ? 2 : 3, mb: { xs: 8, md: 8 }, flex: '1 0 auto' }}>
       <SearchContainer>
         <ResponsiveHeading variant="h1" gutterBottom>
           Hear the Story Come Alive

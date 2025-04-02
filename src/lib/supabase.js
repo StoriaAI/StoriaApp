@@ -1,9 +1,23 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://slvxbqfzfsdufulepitc.supabase.co';
-const supabaseKey = process.env.REACT_APP_SUPABASE_PUBLIC_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNsdnhicWZ6ZnNkdWZ1bGVwaXRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM1NjAyNzAsImV4cCI6MjA1OTEzNjI3MH0.EdaCtu1JMUu60JkHRzuPb3b8X4O4JRfUCEdaXSYjpFs';
+// Use only environment variables without hardcoded fallbacks for security
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+const supabaseKey = process.env.REACT_APP_SUPABASE_PUBLIC_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+// Validate environment variables are set
+if (!supabaseUrl || !supabaseKey) {
+  console.error('Missing Supabase environment variables. Please check your .env file.');
+}
+
+// Create a Supabase client with autoRefreshToken and persistSession enabled
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+    flowType: 'implicit'
+  }
+});
 
 // Authentication helper functions
 export const signUp = async (email, password) => {
@@ -27,6 +41,7 @@ export const signInWithGoogle = async () => {
     provider: 'google',
     options: {
       redirectTo: window.location.origin,
+      skipBrowserRedirect: false, // Ensure browser redirect happens
     }
   });
   return { data, error };
@@ -40,6 +55,24 @@ export const signOut = async () => {
 export const getCurrentUser = async () => {
   const { data: { user } } = await supabase.auth.getUser();
   return user;
+};
+
+// Get the current session
+export const getSession = async () => {
+  const { data, error } = await supabase.auth.getSession();
+  return { data, error };
+};
+
+// Handle a URL with auth parameters
+export const handleAuthRedirect = () => {
+  if (window.location.hash) {
+    const { data, error } = supabase.auth.getSessionFromUrl();
+    if (error) {
+      console.error('Error handling auth redirect:', error);
+    }
+    return { data, error };
+  }
+  return { data: null, error: null };
 };
 
 // User profile helper functions

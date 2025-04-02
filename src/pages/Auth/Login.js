@@ -10,9 +10,10 @@ import {
   Alert,
   useTheme,
   useMediaQuery,
-  Divider
+  Divider,
+  CircularProgress
 } from '@mui/material';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import { signIn, signInWithGoogle } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import GoogleIcon from '@mui/icons-material/Google';
@@ -24,16 +25,24 @@ const Login = () => {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, isAuthenticated } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   useEffect(() => {
+    // Check for OAuth errors in the URL
+    const params = new URLSearchParams(location.search);
+    const errorDescription = params.get('error_description');
+    if (errorDescription) {
+      setError(decodeURIComponent(errorDescription));
+    }
+
     // Redirect to home if already authenticated
     if (isAuthenticated) {
       navigate('/');
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, location]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -67,11 +76,20 @@ const Login = () => {
       setGoogleLoading(true);
       setError('');
       
+      // Clean up the URL in case it has any auth params from a failed login
+      if (location.hash || location.search) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+      
       const { error: googleSignInError } = await signInWithGoogle();
       
       if (googleSignInError) throw googleSignInError;
       
       // The redirect will happen automatically by Supabase
+      // We'll set a fallback for when we return
+      setTimeout(() => {
+        setGoogleLoading(false);
+      }, 5000);
     } catch (err) {
       console.error('Google sign in error:', err);
       setError(err.message || 'Failed to sign in with Google.');
@@ -80,7 +98,7 @@ const Login = () => {
   };
   
   return (
-    <Container maxWidth="sm" sx={{ mt: { xs: 4, md: 8 }, mb: 4 }}>
+    <Container maxWidth="sm" sx={{ mt: { xs: 4, md: 8 }, mb: { xs: 8, md: 8 }, flex: '1 0 auto' }}>
       <Paper 
         elevation={3} 
         sx={{ 
@@ -106,7 +124,7 @@ const Login = () => {
           variant="outlined"
           color="primary"
           size="large"
-          startIcon={<GoogleIcon />}
+          startIcon={googleLoading ? <CircularProgress size={20} color="inherit" /> : <GoogleIcon />}
           onClick={handleGoogleSignIn}
           disabled={googleLoading}
           sx={{ mb: 3 }}
@@ -155,7 +173,12 @@ const Login = () => {
             disabled={loading}
             sx={{ mt: 3, mb: 2 }}
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? (
+              <>
+                <CircularProgress size={20} color="inherit" sx={{ mr: 1 }} />
+                Signing in...
+              </>
+            ) : 'Sign In'}
           </Button>
           
           <Box sx={{ textAlign: 'center', mt: 2 }}>

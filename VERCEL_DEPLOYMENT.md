@@ -17,14 +17,42 @@ This guide will help you deploy the Storia application to Vercel, ensuring prope
 
 Before deploying, you need to set up the following environment variables in your Vercel project:
 
+**Frontend Variables (accessible to client):**
 - `REACT_APP_SUPABASE_URL`: Your Supabase project URL
 - `REACT_APP_SUPABASE_PUBLIC_KEY`: Your Supabase project anon/public key
+
+**Backend Variables (server-side only):**
+- `OPENAI_API_KEY`: Your OpenAI API key
+- `ELEVENLABS_API_KEY`: Your ElevenLabs API key
+- `ELEVENLABS_API_ENDPOINT`: ElevenLabs API endpoint
+- `OPENAI_API_ENDPOINT`: OpenAI API endpoint
+- `OPENAI_SYSTEM_PROMPT`: Custom system prompt for OpenAI
+- `SUPABASE_SERVICE_ROLE`: Your Supabase service role key
+- `JWT_SECRET`: Secret for JWT token verification
+
+**General Configuration:**
+- `PORT`: Server port
+- `NODE_ENV`: Environment (development, production)
+- `VERCEL_URL`: Your Vercel deployment URL
+- `VERCEL_ENV`: Vercel environment
 
 In Vercel:
 1. Go to your project settings
 2. Navigate to the "Environment Variables" tab
 3. Add each variable and its value
 4. Make sure to set the variables for all deployment environments (Production, Preview, and Development)
+5. **Important**: Ensure that backend-only variables are NOT exposed to the browser
+
+### 2. Environment Variable Security
+
+Follow these security practices for handling environment variables:
+
+1. **Single Source of Truth**: All environment variables should be defined in the Vercel dashboard to match the single `.env` file approach used in development
+2. **No Hardcoded Fallbacks**: Never include API keys or secrets in your code, even as fallbacks
+3. **Environment-Specific Values**: Use different API keys for production and development environments
+4. **Encryption**: Vercel encrypts environment variables by default, but be cautious about logging them
+
+Refer to the [ENV_SECURITY_CHECKLIST.md](ENV_SECURITY_CHECKLIST.md) for a complete security checklist.
 
 ### 2. Deploy to Vercel
 
@@ -84,6 +112,12 @@ After deploying, test the following:
 - **Redirect Errors**: Ensure that your Supabase redirect URLs are correctly configured
 - **CORS Errors**: Check browser console and verify your site URL is set correctly in Supabase
 - **Google Auth Not Working**: Verify that your Google OAuth configuration includes the correct redirect URIs
+
+### Environment Variable Issues
+
+- **Missing Variables**: Check that all required variables are set in Vercel dashboard
+- **Client-Side Access**: Verify frontend code only uses `REACT_APP_` prefixed variables
+- **Server Functions**: Ensure server functions have access to required API keys
 
 ### Build Failures
 

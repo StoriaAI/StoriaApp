@@ -738,263 +738,278 @@ function BookReader() {
   }
 
   return (
-    <Container sx={{ mt: isMobile ? 1 : 2, pb: isMobile ? 2 : 4, position: 'relative', px: isMobile ? 1 : 3 }} maxWidth="lg">
-      {/* Top Control Bar */}
-      <Paper elevation={3} sx={{ mb: isMobile ? 1 : 2 }}>
-        <Toolbar 
-          variant="dense" 
-          sx={{ 
-            display: 'flex', 
-            flexDirection: isMobile ? 'column' : 'row',
-            justifyContent: 'space-between',
-            py: isMobile ? 1 : 0
-          }}
-        >
-          <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'center',
-            width: isMobile ? '100%' : 'auto',
-            justifyContent: isMobile ? 'center' : 'flex-start',
-            mb: isMobile ? 1 : 0
-          }}>
-            <Tooltip title="Zoom out">
-              <IconButton onClick={zoomOut} disabled={fontSize <= 12} size={isMobile ? 'small' : 'medium'}>
-                <ZoomOutIcon />
-              </IconButton>
-            </Tooltip>
-            <Typography variant="body2" sx={{ mx: 1 }}>
-              {fontSize}px
-            </Typography>
-            <Tooltip title="Zoom in">
-              <IconButton onClick={zoomIn} disabled={fontSize >= 28} size={isMobile ? 'small' : 'medium'}>
-                <ZoomInIcon />
-              </IconButton>
-            </Tooltip>
-          </Box>
-          
-          {!isMobile && <Divider orientation="vertical" flexItem />}
-          {isMobile && <Divider sx={{ width: '100%', my: 1 }} />}
-          
-          <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'center',
-            flexWrap: isMobile ? 'wrap' : 'nowrap',
-            width: isMobile ? '100%' : 'auto',
-            justifyContent: isMobile ? 'center' : 'flex-start'
-          }}>
-            <Tooltip title={generatingMusic || backgroundGenerating ? "Music generation in progress..." : "Generate ambient music"}>
-              <span>
-                <IconButton 
-                  onClick={generateMusicForCurrentPage} 
-                  disabled={generatingMusic || !pageContents[page]?.trim()}
-                  color={musicUrl ? "primary" : "default"}
-                  size={isMobile ? 'small' : 'medium'}
-                >
-                  <MusicNoteIcon />
-                  {(generatingMusic || backgroundGenerating) && (
-                    <CircularProgress
-                      size={isMobile ? 18 : 24}
-                      sx={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: '50%',
-                        marginTop: isMobile ? '-9px' : '-12px',
-                        marginLeft: isMobile ? '-9px' : '-12px',
-                      }}
-                    />
-                  )}
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100%', mb: 6 }}>
+      <Container sx={{ mt: isMobile ? 1 : 2, pb: isMobile ? 2 : 4, position: 'relative', px: isMobile ? 1 : 3, flex: '1 0 auto' }} maxWidth="lg">
+        {/* Top Control Bar */}
+        <Paper elevation={3} sx={{ mb: isMobile ? 1 : 2 }}>
+          <Toolbar 
+            variant="dense" 
+            sx={{ 
+              display: 'flex', 
+              flexDirection: isMobile ? 'column' : 'row',
+              justifyContent: 'space-between',
+              py: isMobile ? 1 : 0
+            }}
+          >
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center',
+              width: isMobile ? '100%' : 'auto',
+              justifyContent: isMobile ? 'center' : 'flex-start',
+              mb: isMobile ? 1 : 0
+            }}>
+              <Tooltip title="Zoom out">
+                <IconButton onClick={zoomOut} disabled={fontSize <= 12} size={isMobile ? 'small' : 'medium'}>
+                  <ZoomOutIcon />
                 </IconButton>
-              </span>
-            </Tooltip>
+              </Tooltip>
+              <Typography variant="body2" sx={{ mx: 1 }}>
+                {fontSize}px
+              </Typography>
+              <Tooltip title="Zoom in">
+                <IconButton onClick={zoomIn} disabled={fontSize >= 28} size={isMobile ? 'small' : 'medium'}>
+                  <ZoomInIcon />
+                </IconButton>
+              </Tooltip>
+            </Box>
             
-            {musicUrl && (
-              <>
-                <Tooltip title={isPlaying ? "Pause" : "Play"}>
-                  <IconButton onClick={togglePlay} size={isMobile ? 'small' : 'medium'}>
-                    {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
+            {!isMobile && <Divider orientation="vertical" flexItem />}
+            {isMobile && <Divider sx={{ width: '100%', my: 1 }} />}
+            
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center',
+              flexWrap: isMobile ? 'wrap' : 'nowrap',
+              width: isMobile ? '100%' : 'auto',
+              justifyContent: isMobile ? 'center' : 'flex-start'
+            }}>
+              <Tooltip title={generatingMusic || backgroundGenerating ? "Music generation in progress..." : "Generate ambient music"}>
+                <span>
+                  <IconButton 
+                    onClick={generateMusicForCurrentPage} 
+                    disabled={generatingMusic || !pageContents[page]?.trim()}
+                    color={musicUrl ? "primary" : "default"}
+                    size={isMobile ? 'small' : 'medium'}
+                  >
+                    <MusicNoteIcon />
+                    {(generatingMusic || backgroundGenerating) && (
+                      <CircularProgress
+                        size={isMobile ? 18 : 24}
+                        sx={{
+                          position: 'absolute',
+                          top: '50%',
+                          left: '50%',
+                          marginTop: isMobile ? '-9px' : '-12px',
+                          marginLeft: isMobile ? '-9px' : '-12px',
+                        }}
+                      />
+                    )}
                   </IconButton>
-                </Tooltip>
-                
-                <Tooltip title={loopMusic ? "Disable loop" : "Enable loop"}>
-                  <IconButton onClick={toggleLoop} color={loopMusic ? "primary" : "default"} size={isMobile ? 'small' : 'medium'}>
-                    {loopMusic ? <RepeatOneIcon /> : <RepeatIcon />}
-                  </IconButton>
-                </Tooltip>
-                
-                <Tooltip title={isMuted ? "Unmute" : "Mute"}>
-                  <IconButton onClick={toggleMute} size={isMobile ? 'small' : 'medium'}>
-                    {isMuted ? <VolumeMuteIcon /> : <VolumeDownIcon />}
-                  </IconButton>
-                </Tooltip>
-                
-                <Slider
-                  value={volume}
-                  onChange={handleVolumeChange}
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  sx={{ width: isMobile ? 80 : 100, mx: isMobile ? 0.5 : 1 }}
-                  size="small"
-                />
-              </>
-            )}
-          </Box>
-        </Toolbar>
-      </Paper>
+                </span>
+              </Tooltip>
+              
+              {musicUrl && (
+                <>
+                  <Tooltip title={isPlaying ? "Pause" : "Play"}>
+                    <IconButton onClick={togglePlay} size={isMobile ? 'small' : 'medium'}>
+                      {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
+                    </IconButton>
+                  </Tooltip>
+                  
+                  <Tooltip title={loopMusic ? "Disable loop" : "Enable loop"}>
+                    <IconButton onClick={toggleLoop} color={loopMusic ? "primary" : "default"} size={isMobile ? 'small' : 'medium'}>
+                      {loopMusic ? <RepeatOneIcon /> : <RepeatIcon />}
+                    </IconButton>
+                  </Tooltip>
+                  
+                  <Tooltip title={isMuted ? "Unmute" : "Mute"}>
+                    <IconButton onClick={toggleMute} size={isMobile ? 'small' : 'medium'}>
+                      {isMuted ? <VolumeMuteIcon /> : <VolumeDownIcon />}
+                    </IconButton>
+                  </Tooltip>
+                  
+                  <Slider
+                    value={volume}
+                    onChange={handleVolumeChange}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    sx={{ width: isMobile ? 80 : 100, mx: isMobile ? 0.5 : 1 }}
+                    size="small"
+                  />
+                </>
+              )}
+            </Box>
+          </Toolbar>
+        </Paper>
 
-      {/* Content Area */}
-      <Paper sx={{ 
-        p: isMobile ? 2 : 4, 
-        minHeight: isMobile ? '60vh' : '70vh',
-        borderRadius: isMobile ? 1 : 2
-      }}>
-        <Typography 
-          variant="body1" 
-          sx={{ 
-            whiteSpace: 'pre-line',
-            fontSize: `${fontSize}px`,
-            lineHeight: 1.6
-          }}
-        >
-          {content}
-        </Typography>
-      </Paper>
-
-      {/* Hidden audio element */}
-      {musicUrl && (
-        <audio 
-          ref={audioRef} 
-          src={musicUrl} 
-          loop={loopMusic}
-          volume={volume} 
-          onEnded={() => !loopMusic && setIsPlaying(false)} 
-        />
-      )}
-
-      {/* Bottom Navigation */}
-      <Paper elevation={3} sx={{ mt: isMobile ? 1 : 2, p: isMobile ? 1 : 2, borderRadius: isMobile ? 1 : 2 }}>
-        <Box sx={{ mb: isMobile ? 1 : 2 }}>
-          <LinearProgress 
-            variant="determinate" 
-            value={(page / (totalPages - 1)) * 100} 
-            sx={{ mb: 1, height: isMobile ? 6 : 8, borderRadius: 4 }}
-          />
-          <Typography variant="caption" color="text.secondary" align="center" display="block">
-            {Math.round((page / (totalPages - 1)) * 100)}% complete
-          </Typography>
-        </Box>
-        
-        <Box sx={{ 
-          display: 'flex', 
-          flexDirection: isMobile ? 'column' : 'row',
-          justifyContent: 'space-between', 
-          alignItems: 'center',
-          gap: isMobile ? 1 : 0
+        {/* Content Area */}
+        <Paper sx={{ 
+          p: isMobile ? 2 : 4, 
+          minHeight: isMobile ? '60vh' : '70vh',
+          borderRadius: isMobile ? 1 : 2
         }}>
-          <Button 
-            variant="outlined" 
-            onClick={prevPage} 
-            disabled={page === 0}
-            fullWidth={isMobile}
-            size={isMobile ? 'small' : 'medium'}
+          <Typography 
+            variant="body1" 
+            sx={{ 
+              whiteSpace: 'pre-line',
+              fontSize: `${fontSize}px`,
+              lineHeight: 1.6
+            }}
           >
-            Previous
-          </Button>
-          
-          <Box sx={{ 
-            display: 'flex', 
-            flexDirection: isMobile ? 'column' : 'row',
-            alignItems: 'center',
-            width: isMobile ? '100%' : 'auto',
-            gap: isMobile ? 1 : 0,
-            my: isMobile ? 1 : 0,
-            justifyContent: 'center'
-          }}>
-            <Typography sx={{ mr: isMobile ? 0 : 1, fontSize: isMobile ? '0.875rem' : '1rem' }}>
-              Page {page + 1} of {totalPages}
-            </Typography>
-            <Stack 
-              direction="row" 
-              spacing={1} 
-              alignItems="center"
-              sx={{ width: isMobile ? '100%' : 'auto' }}
-            >
-              <TextField
-                size="small"
-                placeholder="Go to page"
-                value={targetPage}
-                onChange={handleTargetPageChange}
-                onKeyPress={handleKeyPress}
-                sx={{ 
-                  width: isMobile ? '100%' : 100,
-                  '& .MuiInputBase-input': {
-                    textAlign: 'center',
-                    py: isMobile ? 0.5 : 1
-                  }
-                }}
-                inputProps={{ 
-                  'aria-label': 'Go to page'
-                }}
-              />
-              <Button 
-                size="small" 
-                variant="outlined" 
-                onClick={goToPage}
-                sx={{ minWidth: isMobile ? '80px' : 'auto' }}
-              >
-                Go
-              </Button>
-            </Stack>
-          </Box>
-          
-          <Button 
-            variant="outlined" 
-            onClick={nextPage} 
-            disabled={page >= totalPages - 1}
-            fullWidth={isMobile}
-            size={isMobile ? 'small' : 'medium'}
-          >
-            Next
-          </Button>
-        </Box>
-      </Paper>
-
-      {/* Error Alert */}
-      {error && (
-        <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
-      )}
-      
-      {/* Debug info - only for development */}
-      {process.env.NODE_ENV === 'development' && (
-        <Paper sx={{ mt: 2, p: 2, opacity: 0.8 }}>
-          <Typography variant="caption">Debug Info:</Typography>
-          <Typography variant="caption" component="div">
-            Cached Pages: {Object.keys(pageContents).length} | 
-            Cached Music: {Object.keys(cachedMusic).length} | 
-            Queue Size: {nextPagesToGenerate.current.length}
+            {content}
           </Typography>
         </Paper>
-      )}
-      
-      {/* Loading backdrop */}
-      <Backdrop
-        sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }}
-        open={initialLoading}
-      >
-        <Box sx={{ textAlign: 'center' }}>
-          <CircularProgress color="inherit" sx={{ mb: 2 }} />
-          <Typography variant="body1">{loadingMessage}</Typography>
-          {loadingProgress > 0 && (
-            <Box sx={{ width: '250px', mt: 2 }}>
-              <LinearProgress variant="determinate" value={loadingProgress} />
-              <Typography variant="caption" sx={{ mt: 1 }}>
-                {loadingProgress}% complete
+
+        {/* Hidden audio element */}
+        {musicUrl && (
+          <audio 
+            ref={audioRef} 
+            src={musicUrl} 
+            loop={loopMusic}
+            volume={volume} 
+            onEnded={() => !loopMusic && setIsPlaying(false)} 
+          />
+        )}
+
+        {/* Bottom Navigation */}
+        <Paper elevation={3} sx={{ mt: isMobile ? 1 : 2, p: isMobile ? 1 : 2, borderRadius: isMobile ? 1 : 2 }}>
+          <Box sx={{ mb: isMobile ? 1 : 2 }}>
+            <LinearProgress 
+              variant="determinate" 
+              value={(page / (totalPages - 1)) * 100} 
+              sx={{ mb: 1, height: isMobile ? 6 : 8, borderRadius: 4 }}
+            />
+            <Typography variant="caption" color="text.secondary" align="center" display="block">
+              {Math.round((page / (totalPages - 1)) * 100)}% complete
+            </Typography>
+          </Box>
+          
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: isMobile ? 'column' : 'row',
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            gap: isMobile ? 1 : 0
+          }}>
+            <Button 
+              variant="outlined" 
+              onClick={prevPage} 
+              disabled={page === 0}
+              fullWidth={isMobile}
+              size={isMobile ? 'small' : 'medium'}
+            >
+              Previous
+            </Button>
+            
+            <Box sx={{ 
+              display: 'flex', 
+              flexDirection: isMobile ? 'column' : 'row',
+              alignItems: 'center',
+              width: isMobile ? '100%' : 'auto',
+              gap: isMobile ? 1 : 0,
+              my: isMobile ? 1 : 0,
+              justifyContent: 'center'
+            }}>
+              <Typography sx={{ mr: isMobile ? 0 : 1, fontSize: isMobile ? '0.875rem' : '1rem' }}>
+                Page {page + 1} of {totalPages}
               </Typography>
+              <Stack 
+                direction="row" 
+                spacing={1} 
+                alignItems="center"
+                sx={{ width: isMobile ? '100%' : 'auto' }}
+              >
+                <TextField
+                  size="small"
+                  placeholder="Go to page"
+                  value={targetPage}
+                  onChange={handleTargetPageChange}
+                  onKeyPress={handleKeyPress}
+                  sx={{ 
+                    width: isMobile ? '100%' : 100,
+                    '& .MuiInputBase-input': {
+                      textAlign: 'center',
+                      py: isMobile ? 0.5 : 1
+                    }
+                  }}
+                  inputProps={{ 
+                    'aria-label': 'Go to page'
+                  }}
+                />
+                <Button 
+                  size="small" 
+                  variant="outlined" 
+                  onClick={goToPage}
+                  sx={{ minWidth: isMobile ? '80px' : 'auto' }}
+                >
+                  Go
+                </Button>
+              </Stack>
             </Box>
-          )}
-        </Box>
-      </Backdrop>
-    </Container>
+            
+            <Button 
+              variant="outlined" 
+              onClick={nextPage} 
+              disabled={page >= totalPages - 1}
+              fullWidth={isMobile}
+              size={isMobile ? 'small' : 'medium'}
+            >
+              Next
+            </Button>
+          </Box>
+        </Paper>
+
+        {/* Error Alert */}
+        {error && (
+          <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
+        )}
+        
+        {/* Debug info - only for development */}
+        {process.env.NODE_ENV === 'development' && (
+          <Paper sx={{ mt: 2, p: 2, opacity: 0.8 }}>
+            <Typography variant="caption">Debug Info:</Typography>
+            <Typography variant="caption" component="div">
+              Cached Pages: {Object.keys(pageContents).length} | 
+              Cached Music: {Object.keys(cachedMusic).length} | 
+              Queue Size: {nextPagesToGenerate.current.length}
+            </Typography>
+          </Paper>
+        )}
+        
+        {/* Loading backdrop */}
+        <Backdrop
+          sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }}
+          open={initialLoading}
+        >
+          <Box sx={{ textAlign: 'center' }}>
+            <CircularProgress color="inherit" sx={{ mb: 2 }} />
+            <Typography variant="body1">{loadingMessage}</Typography>
+            {loadingProgress > 0 && (
+              <Box sx={{ width: '250px', mt: 2 }}>
+                <LinearProgress variant="determinate" value={loadingProgress} />
+                <Typography variant="caption" sx={{ mt: 1 }}>
+                  {loadingProgress}% complete
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        </Backdrop>
+      </Container>
+      
+      {/* Audio player controls bar */}
+      <AppBar 
+        position="fixed" 
+        color="default" 
+        sx={{ 
+          top: 'auto', 
+          bottom: 0,
+          boxShadow: 3
+        }}
+      >
+        {/* ... existing AppBar content ... */}
+      </AppBar>
+    </Box>
   );
 }
 

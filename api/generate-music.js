@@ -1,6 +1,20 @@
 require('dotenv').config();
 const axios = require('axios');
 
+// Validate required environment variables
+const requiredEnvVars = [
+  'OPENAI_API_KEY',
+  'OPENAI_API_ENDPOINT',
+  'ELEVENLABS_API_KEY', 
+  'ELEVENLABS_API_ENDPOINT'
+];
+
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+if (missingVars.length > 0) {
+  console.error(`Missing required environment variables: ${missingVars.join(', ')}`);
+  // Continue with execution, but log the error
+}
+
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -23,12 +37,12 @@ module.exports = async (req, res) => {
     });
 
     // OpenAI API call to generate ambiance prompt
-    const openaiPromise = axios.post(process.env.OPENAI_API_ENDPOINT || 'https://api.openai.com/v1/chat/completions', {
+    const openaiPromise = axios.post(process.env.OPENAI_API_ENDPOINT, {
       model: 'gpt-4',
       messages: [
         { 
           role: 'system', 
-          content: `You are an expert at analyzing text and extracting emotional mood and setting details.
+          content: process.env.OPENAI_SYSTEM_PROMPT || `You are an expert at analyzing text and extracting emotional mood and setting details.
           Create a concise prompt (max 50 words) for generating background ambiance music that matches the emotional mood and setting of the text. Focus on:
           - The dominant emotional mood (e.g., joyful, tense, melancholic)
           - The setting or environment if described 
@@ -66,8 +80,7 @@ module.exports = async (req, res) => {
     
     // ElevenLabs API call to generate music
     try {
-      const elevenlabsEndpoint = process.env.ELEVENLABS_API_ENDPOINT || 'https://api.elevenlabs.io/v1/sound-generation';
-      const elevenlabsPromise = axios.post(elevenlabsEndpoint, {
+      const elevenlabsPromise = axios.post(process.env.ELEVENLABS_API_ENDPOINT, {
         text: elevenLabsPrompt
       }, {
         headers: {

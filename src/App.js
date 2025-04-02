@@ -1,8 +1,9 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider, createTheme, responsiveFontSizes } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import Navbar from './components/Navbar';
+import Footer from './components/Footer';
 import Home from './pages/Home';
 import BookReader from './pages/BookReader';
 import Login from './pages/Auth/Login';
@@ -10,6 +11,8 @@ import SignUp from './pages/Auth/SignUp';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import OnboardingWizard from './components/OnboardingWizard';
 import { CircularProgress, Box } from '@mui/material';
+import { supabase } from './lib/supabase';
+import { debugAuth, handleHashRedirect } from './util/debugAuth';
 
 // Create a base theme with dark mode settings
 let theme = createTheme({
@@ -91,6 +94,37 @@ const LoadingScreen = () => (
   </Box>
 );
 
+// Component to handle OAuth redirects
+const HandleOAuthRedirect = () => {
+  const location = useLocation();
+  
+  useEffect(() => {
+    // Check if there's a hash in the URL (common for OAuth redirects)
+    if (location.hash || location.search) {
+      console.log('Detected potential auth redirect. Running debug...');
+      
+      // Run our debug helper
+      debugAuth().then(() => {
+        console.log('Debug complete. Attempting to handle hash redirect...');
+        
+        // Explicitly handle the hash redirect
+        handleHashRedirect().then(({ data, error }) => {
+          if (error) {
+            console.error('Failed to handle hash redirect:', error);
+          } else if (data) {
+            console.log('Successfully handled hash redirect!');
+            
+            // Clear the URL
+            window.history.replaceState(null, '', window.location.pathname);
+          }
+        });
+      });
+    }
+  }, [location]);
+  
+  return null;
+};
+
 // Protected route component
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -129,46 +163,54 @@ const AppContent = () => {
   if (loading) return <LoadingScreen />;
 
   return (
-    <>
+    <Box sx={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      minHeight: '100vh' 
+    }}>
+      <HandleOAuthRedirect />
       <Navbar />
       {showOnboarding && <OnboardingWizard />}
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route 
-          path="/login" 
-          element={
-            <PublicRoute>
-              <Login />
-            </PublicRoute>
-          } 
-        />
-        <Route 
-          path="/signup" 
-          element={
-            <PublicRoute>
-              <SignUp />
-            </PublicRoute>
-          } 
-        />
-        <Route 
-          path="/books" 
-          element={
-            <ProtectedRoute>
-              <Home />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/book/:id" 
-          element={
-            <ProtectedRoute>
-              <BookReader />
-            </ProtectedRoute>
-          } 
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </>
+      <Box sx={{ flex: 1 }}>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route 
+            path="/login" 
+            element={
+              <PublicRoute>
+                <Login />
+              </PublicRoute>
+            } 
+          />
+          <Route 
+            path="/signup" 
+            element={
+              <PublicRoute>
+                <SignUp />
+              </PublicRoute>
+            } 
+          />
+          <Route 
+            path="/books" 
+            element={
+              <ProtectedRoute>
+                <Home />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/book/:id" 
+            element={
+              <ProtectedRoute>
+                <BookReader />
+              </ProtectedRoute>
+            } 
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Box>
+      <Footer />
+    </Box>
   );
 };
 
