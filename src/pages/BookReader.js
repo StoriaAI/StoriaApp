@@ -16,7 +16,10 @@ import {
   LinearProgress,
   Tooltip,
   Divider,
-  Backdrop
+  Backdrop,
+  useTheme,
+  useMediaQuery,
+  Stack
 } from '@mui/material';
 import VolumeDownIcon from '@mui/icons-material/VolumeDown';
 import VolumeUpIcon from '@mui/icons-material/VolumeUp';
@@ -54,6 +57,9 @@ function BookReader() {
   const audioRef = useRef(null);
   const nextPagesToGenerate = useRef([]);
   const MIN_PAGES_TO_LOAD = 3; // Minimum pages to load before showing content
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
 
   // Initial load - fetch first few pages and start music generation
   useEffect(() => {
@@ -707,12 +713,12 @@ function BookReader() {
 
   if (error) {
     return (
-      <Container sx={{ mt: 4 }}>
+      <Container sx={{ mt: 4, px: isMobile ? 2 : 3 }}>
         <Alert severity="error">{error}</Alert>
         <Button variant="contained" sx={{ mt: 2 }} onClick={() => navigate('/')}>
           Return Home
         </Button>
-        <Button variant="outlined" sx={{ mt: 2, ml: 2 }} onClick={ensurePageContent}>
+        <Button variant="outlined" sx={{ mt: 2, ml: isMobile ? 0 : 2, width: isMobile ? '100%' : 'auto' }} onClick={ensurePageContent}>
           Retry Loading
         </Button>
       </Container>
@@ -722,7 +728,7 @@ function BookReader() {
   // Guard against empty content
   if (!content && !loading) {
     return (
-      <Container sx={{ mt: 4, textAlign: 'center' }}>
+      <Container sx={{ mt: 4, textAlign: 'center', px: isMobile ? 2 : 3 }}>
         <Alert severity="warning">No content available for this page.</Alert>
         <Button variant="contained" sx={{ mt: 2 }} onClick={ensurePageContent}>
           Retry Loading Content
@@ -732,13 +738,27 @@ function BookReader() {
   }
 
   return (
-    <Container sx={{ mt: 2, pb: 4, position: 'relative' }}>
+    <Container sx={{ mt: isMobile ? 1 : 2, pb: isMobile ? 2 : 4, position: 'relative', px: isMobile ? 1 : 3 }} maxWidth="lg">
       {/* Top Control Bar */}
-      <Paper elevation={3} sx={{ mb: 2 }}>
-        <Toolbar variant="dense" sx={{ display: 'flex', justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+      <Paper elevation={3} sx={{ mb: isMobile ? 1 : 2 }}>
+        <Toolbar 
+          variant="dense" 
+          sx={{ 
+            display: 'flex', 
+            flexDirection: isMobile ? 'column' : 'row',
+            justifyContent: 'space-between',
+            py: isMobile ? 1 : 0
+          }}
+        >
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center',
+            width: isMobile ? '100%' : 'auto',
+            justifyContent: isMobile ? 'center' : 'flex-start',
+            mb: isMobile ? 1 : 0
+          }}>
             <Tooltip title="Zoom out">
-              <IconButton onClick={zoomOut} disabled={fontSize <= 12}>
+              <IconButton onClick={zoomOut} disabled={fontSize <= 12} size={isMobile ? 'small' : 'medium'}>
                 <ZoomOutIcon />
               </IconButton>
             </Tooltip>
@@ -746,32 +766,40 @@ function BookReader() {
               {fontSize}px
             </Typography>
             <Tooltip title="Zoom in">
-              <IconButton onClick={zoomIn} disabled={fontSize >= 28}>
+              <IconButton onClick={zoomIn} disabled={fontSize >= 28} size={isMobile ? 'small' : 'medium'}>
                 <ZoomInIcon />
               </IconButton>
             </Tooltip>
           </Box>
           
-          <Divider orientation="vertical" flexItem />
+          {!isMobile && <Divider orientation="vertical" flexItem />}
+          {isMobile && <Divider sx={{ width: '100%', my: 1 }} />}
           
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center',
+            flexWrap: isMobile ? 'wrap' : 'nowrap',
+            width: isMobile ? '100%' : 'auto',
+            justifyContent: isMobile ? 'center' : 'flex-start'
+          }}>
             <Tooltip title={generatingMusic || backgroundGenerating ? "Music generation in progress..." : "Generate ambient music"}>
               <span>
                 <IconButton 
                   onClick={generateMusicForCurrentPage} 
                   disabled={generatingMusic || !pageContents[page]?.trim()}
                   color={musicUrl ? "primary" : "default"}
+                  size={isMobile ? 'small' : 'medium'}
                 >
                   <MusicNoteIcon />
                   {(generatingMusic || backgroundGenerating) && (
                     <CircularProgress
-                      size={24}
+                      size={isMobile ? 18 : 24}
                       sx={{
                         position: 'absolute',
                         top: '50%',
                         left: '50%',
-                        marginTop: '-12px',
-                        marginLeft: '-12px',
+                        marginTop: isMobile ? '-9px' : '-12px',
+                        marginLeft: isMobile ? '-9px' : '-12px',
                       }}
                     />
                   )}
@@ -782,19 +810,19 @@ function BookReader() {
             {musicUrl && (
               <>
                 <Tooltip title={isPlaying ? "Pause" : "Play"}>
-                  <IconButton onClick={togglePlay}>
+                  <IconButton onClick={togglePlay} size={isMobile ? 'small' : 'medium'}>
                     {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
                   </IconButton>
                 </Tooltip>
                 
                 <Tooltip title={loopMusic ? "Disable loop" : "Enable loop"}>
-                  <IconButton onClick={toggleLoop} color={loopMusic ? "primary" : "default"}>
+                  <IconButton onClick={toggleLoop} color={loopMusic ? "primary" : "default"} size={isMobile ? 'small' : 'medium'}>
                     {loopMusic ? <RepeatOneIcon /> : <RepeatIcon />}
                   </IconButton>
                 </Tooltip>
                 
                 <Tooltip title={isMuted ? "Unmute" : "Mute"}>
-                  <IconButton onClick={toggleMute}>
+                  <IconButton onClick={toggleMute} size={isMobile ? 'small' : 'medium'}>
                     {isMuted ? <VolumeMuteIcon /> : <VolumeDownIcon />}
                   </IconButton>
                 </Tooltip>
@@ -805,7 +833,7 @@ function BookReader() {
                   min={0}
                   max={1}
                   step={0.01}
-                  sx={{ width: 100, mx: 1 }}
+                  sx={{ width: isMobile ? 80 : 100, mx: isMobile ? 0.5 : 1 }}
                   size="small"
                 />
               </>
@@ -815,7 +843,11 @@ function BookReader() {
       </Paper>
 
       {/* Content Area */}
-      <Paper sx={{ p: 4, minHeight: '70vh' }}>
+      <Paper sx={{ 
+        p: isMobile ? 2 : 4, 
+        minHeight: isMobile ? '60vh' : '70vh',
+        borderRadius: isMobile ? 1 : 2
+      }}>
         <Typography 
           variant="body1" 
           sx={{ 
@@ -840,50 +872,88 @@ function BookReader() {
       )}
 
       {/* Bottom Navigation */}
-      <Paper elevation={3} sx={{ mt: 2, p: 2 }}>
-        <Box sx={{ mb: 2 }}>
+      <Paper elevation={3} sx={{ mt: isMobile ? 1 : 2, p: isMobile ? 1 : 2, borderRadius: isMobile ? 1 : 2 }}>
+        <Box sx={{ mb: isMobile ? 1 : 2 }}>
           <LinearProgress 
             variant="determinate" 
             value={(page / (totalPages - 1)) * 100} 
-            sx={{ mb: 1, height: 8, borderRadius: 4 }}
+            sx={{ mb: 1, height: isMobile ? 6 : 8, borderRadius: 4 }}
           />
           <Typography variant="caption" color="text.secondary" align="center" display="block">
             {Math.round((page / (totalPages - 1)) * 100)}% complete
           </Typography>
         </Box>
         
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Button variant="outlined" onClick={prevPage} disabled={page === 0}>
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: isMobile ? 'column' : 'row',
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          gap: isMobile ? 1 : 0
+        }}>
+          <Button 
+            variant="outlined" 
+            onClick={prevPage} 
+            disabled={page === 0}
+            fullWidth={isMobile}
+            size={isMobile ? 'small' : 'medium'}
+          >
             Previous
           </Button>
           
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Typography sx={{ mr: 1 }}>
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: isMobile ? 'column' : 'row',
+            alignItems: 'center',
+            width: isMobile ? '100%' : 'auto',
+            gap: isMobile ? 1 : 0,
+            my: isMobile ? 1 : 0,
+            justifyContent: 'center'
+          }}>
+            <Typography sx={{ mr: isMobile ? 0 : 1, fontSize: isMobile ? '0.875rem' : '1rem' }}>
               Page {page + 1} of {totalPages}
             </Typography>
-            <TextField
-              size="small"
-              placeholder="Go to page"
-              value={targetPage}
-              onChange={handleTargetPageChange}
-              onKeyPress={handleKeyPress}
-              sx={{ width: 100 }}
-              inputProps={{ 
-                'aria-label': 'Go to page',
-                style: { textAlign: 'center' }
-              }}
-            />
-            <Button 
-              size="small" 
-              variant="outlined" 
-              onClick={goToPage} 
-              sx={{ ml: 1 }}
+            <Stack 
+              direction="row" 
+              spacing={1} 
+              alignItems="center"
+              sx={{ width: isMobile ? '100%' : 'auto' }}
             >
-              Go
-            </Button>
+              <TextField
+                size="small"
+                placeholder="Go to page"
+                value={targetPage}
+                onChange={handleTargetPageChange}
+                onKeyPress={handleKeyPress}
+                sx={{ 
+                  width: isMobile ? '100%' : 100,
+                  '& .MuiInputBase-input': {
+                    textAlign: 'center',
+                    py: isMobile ? 0.5 : 1
+                  }
+                }}
+                inputProps={{ 
+                  'aria-label': 'Go to page'
+                }}
+              />
+              <Button 
+                size="small" 
+                variant="outlined" 
+                onClick={goToPage}
+                sx={{ minWidth: isMobile ? '80px' : 'auto' }}
+              >
+                Go
+              </Button>
+            </Stack>
           </Box>
           
-          <Button variant="outlined" onClick={nextPage} disabled={page >= totalPages - 1}>
+          <Button 
+            variant="outlined" 
+            onClick={nextPage} 
+            disabled={page >= totalPages - 1}
+            fullWidth={isMobile}
+            size={isMobile ? 'small' : 'medium'}
+          >
             Next
           </Button>
         </Box>
@@ -905,6 +975,25 @@ function BookReader() {
           </Typography>
         </Paper>
       )}
+      
+      {/* Loading backdrop */}
+      <Backdrop
+        sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }}
+        open={initialLoading}
+      >
+        <Box sx={{ textAlign: 'center' }}>
+          <CircularProgress color="inherit" sx={{ mb: 2 }} />
+          <Typography variant="body1">{loadingMessage}</Typography>
+          {loadingProgress > 0 && (
+            <Box sx={{ width: '250px', mt: 2 }}>
+              <LinearProgress variant="determinate" value={loadingProgress} />
+              <Typography variant="caption" sx={{ mt: 1 }}>
+                {loadingProgress}% complete
+              </Typography>
+            </Box>
+          )}
+        </Box>
+      </Backdrop>
     </Container>
   );
 }

@@ -13,6 +13,8 @@ import {
   CircularProgress,
   Alert,
   styled,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material';
 import { Search } from '@mui/icons-material';
 
@@ -20,6 +22,10 @@ const SearchContainer = styled(Box)(({ theme }) => ({
   marginTop: theme.spacing(8),
   marginBottom: theme.spacing(4),
   textAlign: 'center',
+  [theme.breakpoints.down('sm')]: {
+    marginTop: theme.spacing(4),
+    marginBottom: theme.spacing(3),
+  },
 }));
 
 const BookCard = styled(Card)(({ theme }) => ({
@@ -32,6 +38,26 @@ const BookCard = styled(Card)(({ theme }) => ({
   },
 }));
 
+const ResponsiveHeading = styled(Typography)(({ theme }) => ({
+  [theme.breakpoints.down('sm')]: {
+    fontSize: '2rem',
+  },
+  [theme.breakpoints.between('sm', 'md')]: {
+    fontSize: '2.5rem',
+  },
+  [theme.breakpoints.up('md')]: {
+    fontSize: '3rem',
+  },
+}));
+
+const ResponsiveSubheading = styled(Typography)(({ theme }) => ({
+  [theme.breakpoints.down('sm')]: {
+    fontSize: '1rem',
+    marginLeft: theme.spacing(1),
+    marginRight: theme.spacing(1),
+  },
+}));
+
 function Home() {
   const [books, setBooks] = useState([]);
   const [search, setSearch] = useState('');
@@ -39,6 +65,9 @@ function Home() {
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
 
   const fetchBooks = async (searchQuery = '', pageNum = 1) => {
     try {
@@ -85,22 +114,26 @@ function Home() {
   };
 
   return (
-    <Container>
+    <Container maxWidth="lg" sx={{ px: isMobile ? 2 : 3 }}>
       <SearchContainer>
-        <Typography variant="h1" gutterBottom>
+        <ResponsiveHeading variant="h1" gutterBottom>
           Hear the Story Come Alive
-        </Typography>
-        <Typography variant="h5" color="textSecondary" paragraph>
+        </ResponsiveHeading>
+        <ResponsiveSubheading variant="h5" color="textSecondary" paragraph>
           Experience books like never before with immersive AI-powered soundscapes
-        </Typography>
+        </ResponsiveSubheading>
         <Box
           component="form"
           onSubmit={handleSearch}
           sx={{
             display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
             justifyContent: 'center',
-            gap: 1,
+            alignItems: 'center',
+            gap: isMobile ? 2 : 1,
             mt: 4,
+            width: '100%',
+            maxWidth: '100%',
           }}
         >
           <TextField
@@ -108,13 +141,22 @@ function Home() {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by title, author, or subject..."
             variant="outlined"
-            sx={{ width: '100%', maxWidth: 600 }}
+            fullWidth
+            sx={{ 
+              width: '100%', 
+              maxWidth: isMobile ? '100%' : 600 
+            }}
           />
           <Button
             type="submit"
             variant="contained"
-            size="large"
+            size={isMobile ? "medium" : "large"}
             startIcon={<Search />}
+            fullWidth={isMobile}
+            sx={{ 
+              minWidth: isMobile ? '100%' : 'auto',
+              height: isMobile ? '48px' : 'auto'
+            }}
           >
             Search
           </Button>
@@ -132,7 +174,7 @@ function Home() {
           <CircularProgress />
         </Box>
       ) : (
-        <Grid container spacing={4}>
+        <Grid container spacing={isMobile ? 2 : 4}>
           {books.length === 0 && !loading && !error ? (
             <Grid item xs={12}>
               <Typography variant="h6" textAlign="center" color="textSecondary">
@@ -141,11 +183,11 @@ function Home() {
             </Grid>
           ) : (
             books.map((book) => (
-              <Grid item key={book.id} xs={12} sm={6} md={4}>
+              <Grid item key={book.id} xs={12} sm={6} md={4} lg={3}>
                 <BookCard>
                   <CardMedia
                     component="img"
-                    height="300"
+                    height={isMobile ? "200" : isTablet ? "250" : "300"}
                     image={book.formats['image/jpeg']}
                     alt={book.title}
                     onError={(e) => {
@@ -153,10 +195,33 @@ function Home() {
                     }}
                   />
                   <CardContent sx={{ flexGrow: 1 }}>
-                    <Typography gutterBottom variant="h6" component="h2">
+                    <Typography 
+                      gutterBottom 
+                      variant={isMobile ? "subtitle1" : "h6"} 
+                      component="h2"
+                      sx={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        lineHeight: 1.3,
+                        minHeight: isMobile ? '40px' : '48px'
+                      }}
+                    >
                       {book.title}
                     </Typography>
-                    <Typography variant="body2" color="textSecondary">
+                    <Typography 
+                      variant="body2" 
+                      color="textSecondary"
+                      sx={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 1,
+                        WebkitBoxOrient: 'vertical'
+                      }}
+                    >
                       {book.authors.map((author) => author.name).join(', ')}
                     </Typography>
                   </CardContent>
@@ -164,6 +229,11 @@ function Home() {
                     fullWidth
                     variant="contained"
                     onClick={() => navigate(`/book/${book.id}`)}
+                    sx={{ 
+                      borderTopLeftRadius: 0, 
+                      borderTopRightRadius: 0,
+                      py: isMobile ? 1 : 1.5
+                    }}
                   >
                     Start Reading
                   </Button>
