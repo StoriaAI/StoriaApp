@@ -9,6 +9,7 @@ import Login from './pages/Auth/Login';
 import SignUp from './pages/Auth/SignUp';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import OnboardingWizard from './components/OnboardingWizard';
+import { CircularProgress, Box } from '@mui/material';
 
 // Create a base theme with dark mode settings
 let theme = createTheme({
@@ -76,28 +77,87 @@ let theme = createTheme({
 // Apply responsive font sizes to automatically adjust typography
 theme = responsiveFontSizes(theme);
 
+// Loading component
+const LoadingScreen = () => (
+  <Box 
+    sx={{ 
+      display: 'flex', 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      minHeight: '100vh' 
+    }}
+  >
+    <CircularProgress size={60} />
+  </Box>
+);
+
 // Protected route component
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
 
-  if (loading) return null;
+  if (loading) return <LoadingScreen />;
   if (!isAuthenticated) return <Navigate to="/login" />;
   
   return children;
 };
 
+// Public route - redirects to home if already authenticated
+const PublicRoute = ({ children }) => {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) return <LoadingScreen />;
+  if (isAuthenticated) return <Navigate to="/" />;
+  
+  return children;
+};
+
+// Landing page component
+const LandingPage = () => {
+  const { isAuthenticated } = useAuth();
+  
+  if (isAuthenticated) {
+    return <Home />;
+  }
+  
+  return <Navigate to="/login" />;
+};
+
 // App content component that has access to auth context
 const AppContent = () => {
-  const { showOnboarding } = useAuth();
+  const { showOnboarding, loading } = useAuth();
+
+  if (loading) return <LoadingScreen />;
 
   return (
     <>
       <Navbar />
       {showOnboarding && <OnboardingWizard />}
       <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<SignUp />} />
+        <Route path="/" element={<LandingPage />} />
+        <Route 
+          path="/login" 
+          element={
+            <PublicRoute>
+              <Login />
+            </PublicRoute>
+          } 
+        />
+        <Route 
+          path="/signup" 
+          element={
+            <PublicRoute>
+              <SignUp />
+            </PublicRoute>
+          } 
+        />
+        <Route 
+          path="/books" 
+          element={
+            <ProtectedRoute>
+              <Home />
+            </ProtectedRoute>
+          } 
+        />
         <Route 
           path="/book/:id" 
           element={
@@ -106,6 +166,7 @@ const AppContent = () => {
             </ProtectedRoute>
           } 
         />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
   );

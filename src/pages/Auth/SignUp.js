@@ -9,17 +9,20 @@ import {
   Link, 
   Alert,
   useTheme,
-  useMediaQuery
+  useMediaQuery,
+  Divider
 } from '@mui/material';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
-import { signUp } from '../../lib/supabase';
+import { signUp, signInWithGoogle } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import GoogleIcon from '@mui/icons-material/Google';
 
 const SignUp = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
@@ -72,6 +75,23 @@ const SignUp = () => {
     }
   };
   
+  const handleGoogleSignUp = async () => {
+    try {
+      setGoogleLoading(true);
+      setError('');
+      
+      const { error: googleSignInError } = await signInWithGoogle();
+      
+      if (googleSignInError) throw googleSignInError;
+      
+      // The redirect will happen automatically by Supabase
+    } catch (err) {
+      console.error('Google sign up error:', err);
+      setError(err.message || 'Failed to sign up with Google.');
+      setGoogleLoading(false);
+    }
+  };
+  
   return (
     <Container maxWidth="sm" sx={{ mt: { xs: 4, md: 8 }, mb: 4 }}>
       <Paper 
@@ -93,6 +113,25 @@ const SignUp = () => {
             {error}
           </Alert>
         )}
+        
+        <Button
+          fullWidth
+          variant="outlined"
+          color="primary"
+          size="large"
+          startIcon={<GoogleIcon />}
+          onClick={handleGoogleSignUp}
+          disabled={googleLoading}
+          sx={{ mb: 3 }}
+        >
+          {googleLoading ? 'Connecting to Google...' : 'Sign up with Google'}
+        </Button>
+        
+        <Divider sx={{ width: '100%', mb: 3 }}>
+          <Typography variant="body2" color="textSecondary">
+            Or sign up with email
+          </Typography>
+        </Divider>
         
         <Box component="form" onSubmit={handleSubmit} noValidate sx={{ width: '100%' }}>
           <TextField

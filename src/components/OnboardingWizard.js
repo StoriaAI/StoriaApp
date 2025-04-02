@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -24,7 +24,7 @@ import {
   DialogActions
 } from '@mui/material';
 import { Close, PhotoCamera, ArrowBack, ArrowForward, Check } from '@mui/icons-material';
-import { supabase, updateUserProfile } from '../lib/supabase';
+import { supabase, updateUserProfile, getUserProfile } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
 // Available book genres
@@ -60,6 +60,7 @@ const OnboardingWizard = () => {
   // Steps state
   const [activeStep, setActiveStep] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState('');
 
   // Form state
@@ -84,6 +85,54 @@ const OnboardingWizard = () => {
     profilePhoto: '',
     selectedGenres: ''
   });
+
+  // On component mount, check if we need to pre-populate fields from provider info
+  useEffect(() => {
+    const checkExistingProfile = async () => {
+      if (!user) return;
+      
+      try {
+        setInitialLoading(true);
+        
+        // Check if user already has a profile
+        const { data } = await getUserProfile(user.id);
+        
+        // If user has provider data (like from Google)
+        if (user.user_metadata) {
+          const metadata = user.user_metadata;
+          
+          // Pre-populate form with available data from provider
+          setFormState(prev => ({
+            ...prev,
+            firstName: data?.first_name || metadata.full_name?.split(' ')[0] || '',
+            lastName: data?.last_name || metadata.full_name?.split(' ').slice(1).join(' ') || '',
+            profilePhotoUrl: data?.profile_photo_url || metadata.avatar_url || '',
+            // Don't clear other fields if they exist in the database
+            country: data?.country || prev.country,
+            selectedGenres: data?.preferred_genres || prev.selectedGenres,
+            selectedAiFeatures: data?.ai_preferences || prev.selectedAiFeatures
+          }));
+        } else if (data) {
+          // Use data from database if it exists
+          setFormState(prev => ({
+            ...prev,
+            firstName: data.first_name || '',
+            lastName: data.last_name || '',
+            country: data.country || '',
+            profilePhotoUrl: data.profile_photo_url || '',
+            selectedGenres: data.preferred_genres || [],
+            selectedAiFeatures: data.ai_preferences || []
+          }));
+        }
+      } catch (err) {
+        console.error('Error loading user profile data:', err);
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+    
+    checkExistingProfile();
+  }, [user]);
 
   // Handle form field change
   const handleChange = (e) => {
@@ -167,7 +216,8 @@ const OnboardingWizard = () => {
       isValid = false;
     }
     
-    if (!formState.profilePhoto) {
+    // Only require profile photo if one isn't already provided from OAuth
+    if (!formState.profilePhoto && !formState.profilePhotoUrl) {
       errors.profilePhoto = 'Profile photo is required';
       isValid = false;
     }
@@ -196,10 +246,10 @@ const OnboardingWizard = () => {
       setLoading(true);
       setError('');
 
-      // First upload the image
-      let profileImageUrl = '';
+      // First upload the image if we have a new one
+      let profileImageUrl = formState.profilePhotoUrl;
       
-      if (formState.profilePhoto) {
+      if (formState.profilePhoto && !profileImageUrl.startsWith('https://')) {
         const fileExt = formState.profilePhoto.name.split('.').pop();
         const fileName = `${user.id}-${Date.now()}.${fileExt}`;
         
@@ -279,6 +329,21 @@ const OnboardingWizard = () => {
     
     setShowOnboarding(false);
   };
+  
+  // If we're still loading data, show a loading state
+  if (initialLoading) {
+    return (
+      <Dialog 
+        open={true} 
+        maxWidth="md"
+        fullWidth
+      >
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', p: 4, minHeight: 400 }}>
+          <CircularProgress size={60} />
+        </Box>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog 
