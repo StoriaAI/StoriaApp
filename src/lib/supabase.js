@@ -55,46 +55,30 @@ export const signIn = async (email, password) => {
 };
 
 export const signInWithGoogle = async () => {
-  // Determine the correct redirect URL based on environment
-  let redirectUrl = window.location.origin;
-  const hostname = window.location.hostname;
-  
-  // Special handling for Vercel URLs and production environments
-  if (isProduction) {
-    // For production environments
-    // IMPORTANT: This must exactly match what's configured in Google Cloud Console
-    // Enter your exact production URL below (with NO trailing slash)
-    const hardcodedProductionUrl = "https://storia-app.vercel.app"; // Replace with your actual URL
-    
-    redirectUrl = hardcodedProductionUrl;
-    console.log('Using hardcoded production redirect URL:', redirectUrl);
-  } else {
-    // In development, use the current origin (localhost)
-    console.log('Using development redirect URL:', redirectUrl);
-  }
-  
-  // Add explicit console logging for debugging
-  console.group('Google Auth Redirect Information');
-  console.log('Environment:', isProduction ? 'Production' : 'Development');
-  console.log('Window Origin:', window.location.origin);
-  console.log('Hostname:', hostname);
-  console.log('VERCEL_URL:', process.env.VERCEL_URL);
-  console.log('REACT_APP_VERCEL_URL:', process.env.REACT_APP_VERCEL_URL);
-  console.log('Final redirectUrl:', redirectUrl);
-  console.groupEnd();
+  // In the Google Cloud Console, you should have authorized:
+  // 1. The Supabase callback URL: https://slvxbqfzfsdufulepitc.supabase.co/auth/v1/callback
+  // 2. Your app URL: https://storia-app.vercel.app (if this is your production URL)
   
   try {
+    console.group('Google Auth Redirect Information');
+    console.log('Environment:', isProduction ? 'Production' : 'Development');
+    console.log('Window Origin:', window.location.origin);
+    console.log('Hostname:', window.location.hostname);
+    
+    // Important: Do NOT hardcode a redirect URL here
+    // Instead, let Supabase handle the redirect flow properly
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: redirectUrl,
+        // Do NOT specify redirectTo here - let Supabase handle it
+        // The Site URL in Supabase should be set to your app URL
         queryParams: {
           // Force approval screen to ensure correct redirects
           prompt: 'consent',
           // Add timestamps to prevent caching issues
           _t: Date.now()
         },
-        skipBrowserRedirect: false, // Ensure browser redirect happens
+        skipBrowserRedirect: false // Ensure browser redirect happens
       }
     });
     
@@ -102,6 +86,7 @@ export const signInWithGoogle = async () => {
       console.error('Error initiating Google sign-in:', error);
     }
     
+    console.groupEnd();
     return { data, error };
   } catch (err) {
     console.error('Exception during Google sign-in:', err);
