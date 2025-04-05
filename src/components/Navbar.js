@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import {
   AppBar,
   Toolbar,
@@ -15,7 +15,12 @@ import {
   ListItemIcon,
   ListItemText,
   useMediaQuery,
-  useTheme
+  useTheme,
+  Avatar,
+  Menu,
+  MenuItem,
+  Divider,
+  Tooltip
 } from '@mui/material';
 import { 
   LibraryBooks, 
@@ -23,8 +28,14 @@ import {
   ContactMail, 
   Menu as MenuIcon,
   Home as HomeIcon,
-  Close as CloseIcon
+  Close as CloseIcon,
+  AccountCircle,
+  Login,
+  Logout,
+  PersonAdd
 } from '@mui/icons-material';
+import { useAuth } from '../contexts/AuthContext';
+import { signOut } from '../lib/supabase';
 
 const StyledAppBar = styled(AppBar)(({ theme }) => ({
   background: 'transparent',
@@ -73,7 +84,10 @@ const NavButton = styled(Button)(({ theme }) => ({
 function Navbar() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const navigate = useNavigate();
+  const { user, isAuthenticated } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [profileMenuAnchor, setProfileMenuAnchor] = useState(null);
 
   const toggleDrawer = (open) => (event) => {
     if (
@@ -83,6 +97,24 @@ function Navbar() {
       return;
     }
     setDrawerOpen(open);
+  };
+
+  const handleProfileMenuOpen = (event) => {
+    setProfileMenuAnchor(event.currentTarget);
+  };
+
+  const handleProfileMenuClose = () => {
+    setProfileMenuAnchor(null);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      handleProfileMenuClose();
+      navigate('/');
+    } catch (error) {
+      console.error('Error logging out:', error);
+    }
   };
 
   const navItems = [
@@ -138,6 +170,82 @@ function Navbar() {
             />
           </ListItem>
         ))}
+        
+        <Divider sx={{ my: 2 }} />
+        
+        {isAuthenticated ? (
+          <ListItem 
+            button 
+            onClick={handleLogout}
+            sx={{ 
+              py: 1.5,
+              '&:hover': {
+                backgroundColor: 'rgba(244, 228, 188, 0.1)',
+              } 
+            }}
+          >
+            <ListItemIcon sx={{ color: theme.palette.primary.main, minWidth: 40 }}>
+              <Logout />
+            </ListItemIcon>
+            <ListItemText 
+              primary="Log Out" 
+              primaryTypographyProps={{ 
+                fontFamily: "'Playfair Display', serif",
+                fontWeight: 600,
+                color: theme.palette.primary.main
+              }}
+            />
+          </ListItem>
+        ) : (
+          <>
+            <ListItem 
+              button 
+              component={RouterLink} 
+              to="/login"
+              sx={{ 
+                py: 1.5,
+                '&:hover': {
+                  backgroundColor: 'rgba(244, 228, 188, 0.1)',
+                } 
+              }}
+            >
+              <ListItemIcon sx={{ color: theme.palette.primary.main, minWidth: 40 }}>
+                <Login />
+              </ListItemIcon>
+              <ListItemText 
+                primary="Login" 
+                primaryTypographyProps={{ 
+                  fontFamily: "'Playfair Display', serif",
+                  fontWeight: 600,
+                  color: theme.palette.primary.main
+                }}
+              />
+            </ListItem>
+            <ListItem 
+              button 
+              component={RouterLink} 
+              to="/signup"
+              sx={{ 
+                py: 1.5,
+                '&:hover': {
+                  backgroundColor: 'rgba(244, 228, 188, 0.1)',
+                } 
+              }}
+            >
+              <ListItemIcon sx={{ color: theme.palette.primary.main, minWidth: 40 }}>
+                <PersonAdd />
+              </ListItemIcon>
+              <ListItemText 
+                primary="Sign Up" 
+                primaryTypographyProps={{ 
+                  fontFamily: "'Playfair Display', serif",
+                  fontWeight: 600,
+                  color: theme.palette.primary.main
+                }}
+              />
+            </ListItem>
+          </>
+        )}
       </List>
     </Box>
   );
@@ -172,7 +280,7 @@ function Navbar() {
             </>
           ) : (
             // Desktop navigation
-            <Box sx={{ display: 'flex' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
               {navItems.map((item, index) => (
                 index !== 0 && (
                   <NavButton
@@ -185,6 +293,66 @@ function Navbar() {
                   </NavButton>
                 )
               ))}
+              
+              {isAuthenticated ? (
+                <>
+                  <Tooltip title="Account settings">
+                    <IconButton 
+                      onClick={handleProfileMenuOpen}
+                      size="small"
+                      sx={{ ml: 2 }}
+                    >
+                      <Avatar 
+                        alt={user?.email} 
+                        src={user?.user_metadata?.avatar_url || ''} 
+                        sx={{ 
+                          width: 40, 
+                          height: 40,
+                          bgcolor: theme.palette.primary.main,
+                          color: theme.palette.background.default
+                        }}
+                      >
+                        {user?.email?.charAt(0).toUpperCase() || <AccountCircle />}
+                      </Avatar>
+                    </IconButton>
+                  </Tooltip>
+                  <Menu
+                    anchorEl={profileMenuAnchor}
+                    open={Boolean(profileMenuAnchor)}
+                    onClose={handleProfileMenuClose}
+                    transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+                    anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+                  >
+                    <MenuItem onClick={() => { handleProfileMenuClose(); navigate('/profile'); }}>
+                      Profile
+                    </MenuItem>
+                    <MenuItem onClick={() => { handleProfileMenuClose(); navigate('/settings'); }}>
+                      Settings
+                    </MenuItem>
+                    <Divider />
+                    <MenuItem onClick={handleLogout}>
+                      Logout
+                    </MenuItem>
+                  </Menu>
+                </>
+              ) : (
+                <Box sx={{ display: 'flex' }}>
+                  <NavButton
+                    component={RouterLink}
+                    to="/login"
+                    startIcon={<Login />}
+                  >
+                    Login
+                  </NavButton>
+                  <NavButton
+                    component={RouterLink}
+                    to="/signup"
+                    startIcon={<PersonAdd />}
+                  >
+                    Sign Up
+                  </NavButton>
+                </Box>
+              )}
             </Box>
           )}
         </Toolbar>
