@@ -55,30 +55,33 @@ export const signIn = async (email, password) => {
 };
 
 export const signInWithGoogle = async () => {
-  // In the Google Cloud Console, you should have authorized:
-  // 1. The Supabase callback URL: https://slvxbqfzfsdufulepitc.supabase.co/auth/v1/callback
-  // 2. Your app URL: https://storia-app.vercel.app (if this is your production URL)
+  // Explicitly set the redirect URL based on environment
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const productionUrl = 'https://storia-app.vercel.app'; // Replace with your actual production URL
+  
+  // Determine appropriate redirect URL
+  const redirectUrl = isLocalhost 
+    ? window.location.origin 
+    : productionUrl;
   
   try {
     console.group('Google Auth Redirect Information');
     console.log('Environment:', isProduction ? 'Production' : 'Development');
     console.log('Window Origin:', window.location.origin);
     console.log('Hostname:', window.location.hostname);
+    console.log('Is Localhost:', isLocalhost);
+    console.log('Redirect URL:', redirectUrl);
     
-    // Important: Do NOT hardcode a redirect URL here
-    // Instead, let Supabase handle the redirect flow properly
+    // Force the redirectTo URL to override Supabase's site URL setting
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        // Do NOT specify redirectTo here - let Supabase handle it
-        // The Site URL in Supabase should be set to your app URL
+        redirectTo: redirectUrl, // Explicitly set the redirect URL
         queryParams: {
-          // Force approval screen to ensure correct redirects
           prompt: 'consent',
-          // Add timestamps to prevent caching issues
           _t: Date.now()
         },
-        skipBrowserRedirect: false // Ensure browser redirect happens
+        skipBrowserRedirect: false
       }
     });
     

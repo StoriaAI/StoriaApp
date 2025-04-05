@@ -18,6 +18,7 @@ import { signIn, signInWithGoogle } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import GoogleIcon from '@mui/icons-material/Google';
 import { debugOAuthRedirects, fixOAuthRedirectIssues } from '../../util/debugOAuth';
+import { logRedirectInfo, detectRedirectIssue } from '../../util/redirectChecker';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -33,6 +34,19 @@ const Login = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   useEffect(() => {
+    // Log redirect info to help with debugging
+    logRedirectInfo();
+    
+    // Check for redirect issues (like being on localhost in production)
+    const { hasIssue } = detectRedirectIssue();
+    if (hasIssue) {
+      // If we're in production but on localhost, redirect to production URL
+      const productionUrl = 'https://storia-app.vercel.app'; // Replace with your actual production URL
+      console.log('⚠️ Detected we are on localhost in production. Redirecting to:', productionUrl);
+      window.location.href = productionUrl;
+      return;
+    }
+
     // Check for OAuth hash or errors in the URL
     if (location.hash || location.search) {
       // Run fix for OAuth redirect issues
