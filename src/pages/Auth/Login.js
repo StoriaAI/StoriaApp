@@ -17,6 +17,7 @@ import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import { signIn, signInWithGoogle } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import GoogleIcon from '@mui/icons-material/Google';
+import { debugOAuthRedirects, fixOAuthRedirectIssues } from '../../util/debugOAuth';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -24,6 +25,7 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
+  const [debugInfo, setDebugInfo] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
   const { user, isAuthenticated } = useAuth();
@@ -31,12 +33,28 @@ const Login = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   useEffect(() => {
-    // Check for OAuth errors in the URL
-    const params = new URLSearchParams(location.search);
-    const errorDescription = params.get('error_description');
-    if (errorDescription) {
-      setError(decodeURIComponent(errorDescription));
+    // Check for OAuth hash or errors in the URL
+    if (location.hash || location.search) {
+      // Run fix for OAuth redirect issues
+      fixOAuthRedirectIssues().then(result => {
+        if (result.success) {
+          console.log('Successfully processed OAuth redirect');
+        } else if (result.error && result.error !== 'No OAuth hash detected in URL') {
+          console.error('Error fixing OAuth redirect:', result.error);
+        }
+      });
+      
+      // Check for error description in query params
+      const params = new URLSearchParams(location.search);
+      const errorDescription = params.get('error_description');
+      if (errorDescription) {
+        setError(decodeURIComponent(errorDescription));
+      }
     }
+
+    // Log debugging information for OAuth redirects
+    const debug = debugOAuthRedirects();
+    setDebugInfo(debug);
 
     // Redirect to home if already authenticated
     if (isAuthenticated) {
@@ -80,6 +98,9 @@ const Login = () => {
       if (location.hash || location.search) {
         window.history.replaceState(null, '', window.location.pathname);
       }
+      
+      // Log debug info before initiating sign-in
+      debugOAuthRedirects();
       
       const { error: googleSignInError } = await signInWithGoogle();
       
@@ -191,6 +212,17 @@ const Login = () => {
           </Box>
         </Box>
       </Paper>
+      
+      {/* Debug info in development mode */}
+      {process.env.NODE_ENV === 'development' && debugInfo && (
+        <Paper sx={{ mt: 3, p: 2, opacity: 0.8 }}>
+          <Typography variant="caption">OAuth Debug Info:</Typography>
+          <Typography variant="caption" component="div">
+            Environment: {debugInfo.environment} | 
+            Redirect URL: {debugInfo.determinedRedirectUrl}
+          </Typography>
+        </Paper>
+      )}
     </Container>
   );
 };

@@ -54,11 +54,11 @@ This document provides detailed instructions for configuring Google Authenticati
    - Go to "Authentication" > "URL Configuration"
    - Set Site URL:
      - For development: `http://localhost:3000`
-     - For production: `https://your-vercel-app.vercel.app`
+     - For production: `https://joinstoria.vercel.app/**`
    
    - Add Redirect URLs:
      - For development: `http://localhost:3000/**`
-     - For production: `https://your-vercel-app.vercel.app/**`
+     - For production: `https://joinstoria.vercel.app/**`
 
 ## Environment Variables Setup
 

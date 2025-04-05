@@ -17,7 +17,23 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
-    flowType: 'implicit'
+    flowType: 'implicit',
+    debug: true, // Enable debug mode to see auth-related logs
+    localStorage: {
+      // In some cases, using built-in localStorage helps with OAuth issues
+      getItem: (key) => {
+        console.log('Getting storage item:', key);
+        return window.localStorage.getItem(key);
+      },
+      setItem: (key, value) => {
+        console.log('Setting storage item:', key);
+        window.localStorage.setItem(key, value);
+      },
+      removeItem: (key) => {
+        console.log('Removing storage item:', key);
+        window.localStorage.removeItem(key);
+      },
+    }
   }
 });
 
@@ -41,26 +57,56 @@ export const signIn = async (email, password) => {
 export const signInWithGoogle = async () => {
   // Determine the correct redirect URL based on environment
   let redirectUrl = window.location.origin;
+  const hostname = window.location.hostname;
   
-  // In production, if we have a Vercel URL, use it instead of window.location.origin
-  // This ensures we don't redirect to localhost in production
-  if (isProduction && vercelUrl) {
-    redirectUrl = vercelUrl.startsWith('http') 
-      ? vercelUrl 
-      : `https://${vercelUrl}`;
-    console.log('Using Vercel URL for redirect:', redirectUrl);
+  // Special handling for Vercel URLs and production environments
+  if (isProduction) {
+    // For production environments
+    // IMPORTANT: This must exactly match what's configured in Google Cloud Console
+    // Enter your exact production URL below (with NO trailing slash)
+    const hardcodedProductionUrl = "https://storia-app.vercel.app"; // Replace with your actual URL
+    
+    redirectUrl = hardcodedProductionUrl;
+    console.log('Using hardcoded production redirect URL:', redirectUrl);
   } else {
-    console.log('Using origin for redirect:', redirectUrl);
+    // In development, use the current origin (localhost)
+    console.log('Using development redirect URL:', redirectUrl);
   }
   
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo: redirectUrl,
-      skipBrowserRedirect: false, // Ensure browser redirect happens
+  // Add explicit console logging for debugging
+  console.group('Google Auth Redirect Information');
+  console.log('Environment:', isProduction ? 'Production' : 'Development');
+  console.log('Window Origin:', window.location.origin);
+  console.log('Hostname:', hostname);
+  console.log('VERCEL_URL:', process.env.VERCEL_URL);
+  console.log('REACT_APP_VERCEL_URL:', process.env.REACT_APP_VERCEL_URL);
+  console.log('Final redirectUrl:', redirectUrl);
+  console.groupEnd();
+  
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: redirectUrl,
+        queryParams: {
+          // Force approval screen to ensure correct redirects
+          prompt: 'consent',
+          // Add timestamps to prevent caching issues
+          _t: Date.now()
+        },
+        skipBrowserRedirect: false, // Ensure browser redirect happens
+      }
+    });
+    
+    if (error) {
+      console.error('Error initiating Google sign-in:', error);
     }
-  });
-  return { data, error };
+    
+    return { data, error };
+  } catch (err) {
+    console.error('Exception during Google sign-in:', err);
+    return { data: null, error: err };
+  }
 };
 
 export const signOut = async () => {

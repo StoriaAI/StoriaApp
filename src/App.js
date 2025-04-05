@@ -13,6 +13,7 @@ import OnboardingWizard from './components/OnboardingWizard';
 import { CircularProgress, Box } from '@mui/material';
 import { supabase } from './lib/supabase';
 import { debugAuth, handleHashRedirect } from './util/debugAuth';
+import { debugOAuthRedirects, fixOAuthRedirectIssues } from './util/debugOAuth';
 
 // Create a base theme with dark mode settings
 let theme = createTheme({
@@ -103,20 +104,31 @@ const HandleOAuthRedirect = () => {
     if (location.hash || location.search) {
       console.log('Detected potential auth redirect in HandleOAuthRedirect component');
       
-      // Run our debug helper
-      debugAuth().then(() => {
-        console.log('Debug complete. Attempting to handle hash redirect...');
+      // Run our new OAuth debug helper
+      debugOAuthRedirects();
+      
+      // Try to fix common OAuth issues
+      fixOAuthRedirectIssues().then(result => {
+        if (result.success) {
+          console.log('Successfully fixed OAuth redirect in HandleOAuthRedirect component!');
+          return;
+        }
         
-        // Explicitly handle the hash redirect
-        handleHashRedirect().then(({ data, error }) => {
-          if (error) {
-            console.error('Failed to handle hash redirect:', error);
-          } else if (data) {
-            console.log('Successfully handled hash redirect in HandleOAuthRedirect component!');
-            
-            // Clear the URL
-            window.history.replaceState(null, '', window.location.pathname);
-          }
+        // If the new utility didn't fix it, try the original debug helper as fallback
+        debugAuth().then(() => {
+          console.log('Debug complete. Attempting to handle hash redirect...');
+          
+          // Explicitly handle the hash redirect
+          handleHashRedirect().then(({ data, error }) => {
+            if (error) {
+              console.error('Failed to handle hash redirect:', error);
+            } else if (data) {
+              console.log('Successfully handled hash redirect in HandleOAuthRedirect component!');
+              
+              // Clear the URL
+              window.history.replaceState(null, '', window.location.pathname);
+            }
+          });
         });
       });
     }
