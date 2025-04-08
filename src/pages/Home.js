@@ -17,6 +17,8 @@ import {
   useMediaQuery,
 } from '@mui/material';
 import { Search } from '@mui/icons-material';
+import FallbackLibrary from '../components/FallbackLibrary';
+import '../styles/Home.css';
 
 const SearchContainer = styled(Box)(({ theme }) => ({
   marginTop: theme.spacing(8),
@@ -64,6 +66,7 @@ function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
+  const [showFallback, setShowFallback] = useState(false);
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -73,21 +76,39 @@ function Home() {
     try {
       setLoading(true);
       setError(null);
-      console.log(`Fetching books from: /api/books?search=${encodeURIComponent(searchQuery)}&page=${pageNum}`);
+      setShowFallback(false);
       
-      const response = await fetch(
-        `/api/books?search=${encodeURIComponent(searchQuery)}&page=${pageNum}`
-      );
+      let apiUrl = `/api/books?search=${encodeURIComponent(searchQuery)}&page=${pageNum}`;
+      console.log(`Fetching books from: ${apiUrl}`);
       
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries([...response.headers.entries()]));
+      let response = await fetch(apiUrl);
       
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      // If we get an HTML response (error) and we're in development, try using localhost API
+      if (!response.ok || response.headers.get('content-type')?.includes('text/html')) {
+        console.warn('First API attempt failed, trying absolute URL');
+        
+        // Try with absolute URL (development or serverless function not responding)
+        const baseUrl = window.location.hostname === 'localhost' ? 
+          'http://localhost:3000' : // Use port 3000 for the Express server
+          window.location.origin;
+          
+        apiUrl = `${baseUrl}/api/books?search=${encodeURIComponent(searchQuery)}&page=${pageNum}`;
+        console.log(`Retrying with: ${apiUrl}`);
+        
+        response = await fetch(apiUrl);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+      }
+      
+      // Check content type to ensure it's JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error(`Expected JSON response but got ${contentType}`);
       }
       
       const data = await response.json();
-      console.log('Response data:', data);
       
       if (!data.results || !Array.isArray(data.results)) {
         throw new Error('Invalid data format received from server');
@@ -98,6 +119,7 @@ function Home() {
     } catch (error) {
       console.error('Error fetching books:', error);
       setError(`Failed to fetch books: ${error.message}`);
+      setShowFallback(true);
       setBooks([]);
     } finally {
       setLoading(false);
@@ -111,6 +133,14 @@ function Home() {
   const handleSearch = (e) => {
     e.preventDefault();
     fetchBooks(search, 1);
+  };
+  
+  const handleRetry = () => {
+    fetchBooks(search, page);
+  };
+  
+  const handleBookSelect = (bookId) => {
+    navigate(`/book/${bookId}`);
   };
 
   return (
@@ -163,7 +193,7 @@ function Home() {
         </Box>
       </SearchContainer>
 
-      {error && (
+      {error && !showFallback && (
         <Alert severity="error" sx={{ mb: 4 }}>
           {error}
         </Alert>
@@ -173,6 +203,8 @@ function Home() {
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
           <CircularProgress />
         </Box>
+      ) : showFallback ? (
+        <FallbackLibrary onRetry={handleRetry} onBookSelect={handleBookSelect} />
       ) : (
         <Grid container spacing={isMobile ? 2 : 4}>
           {books.length === 0 && !loading && !error ? (

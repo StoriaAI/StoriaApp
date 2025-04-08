@@ -8,6 +8,9 @@ import Home from './pages/Home';
 import BookReader from './pages/BookReader';
 import Login from './pages/Auth/Login';
 import SignUp from './pages/Auth/SignUp';
+import About from './pages/About';
+import Contact from './pages/Contact';
+import Profile from './pages/Profile';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import OnboardingWizard from './components/OnboardingWizard';
 import { CircularProgress, Box } from '@mui/material';
@@ -215,6 +218,16 @@ const AppContent = () => {
             element={
               <ProtectedRoute>
                 <BookReader />
+              </ProtectedRoute>
+            } 
+          />
+          <Route path="/about" element={<About />} />
+          <Route path="/contact" element={<Contact />} />
+          <Route 
+            path="/profile" 
+            element={
+              <ProtectedRoute>
+                <Profile />
               </ProtectedRoute>
             } 
           />

@@ -4,6 +4,7 @@ import App from './App';
 import '@fontsource/playfair-display/400.css';
 import '@fontsource/playfair-display/600.css';
 import '@fontsource/playfair-display/700.css';
+import './styles/main.css';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(

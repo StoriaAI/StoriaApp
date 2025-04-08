@@ -36,6 +36,7 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { signOut } from '../lib/supabase';
+import '../styles/Navbar.css';
 
 const StyledAppBar = styled(AppBar)(({ theme }) => ({
   background: 'transparent',
@@ -58,32 +59,16 @@ const Logo = styled(Typography)(({ theme }) => ({
 
 const NavButton = styled(Button)(({ theme }) => ({
   color: theme.palette.primary.main,
-  marginLeft: theme.spacing(3),
+  marginLeft: theme.spacing(2),
   '&:hover': {
     backgroundColor: 'rgba(244, 228, 188, 0.1)',
-  },
-  [theme.breakpoints.down('md')]: {
-    marginLeft: theme.spacing(1),
-    padding: theme.spacing(1),
-    minWidth: 'unset',
-    '& .MuiButton-startIcon': {
-      margin: 0,
-    },
-    '& .MuiButton-endIcon': {
-      margin: 0,
-    },
-    '& .MuiSvgIcon-root': {
-      fontSize: '1.2rem',
-    },
-    '& .MuiTypography-root': {
-      display: 'none',
-    },
   },
 }));
 
 function Navbar() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -174,28 +159,53 @@ function Navbar() {
         <Divider sx={{ my: 2 }} />
         
         {isAuthenticated ? (
-          <ListItem 
-            button 
-            onClick={handleLogout}
-            sx={{ 
-              py: 1.5,
-              '&:hover': {
-                backgroundColor: 'rgba(244, 228, 188, 0.1)',
-              } 
-            }}
-          >
-            <ListItemIcon sx={{ color: theme.palette.primary.main, minWidth: 40 }}>
-              <Logout />
-            </ListItemIcon>
-            <ListItemText 
-              primary="Log Out" 
-              primaryTypographyProps={{ 
-                fontFamily: "'Playfair Display', serif",
-                fontWeight: 600,
-                color: theme.palette.primary.main
+          <>
+            <ListItem 
+              button 
+              component={RouterLink}
+              to="/profile"
+              sx={{ 
+                py: 1.5,
+                '&:hover': {
+                  backgroundColor: 'rgba(244, 228, 188, 0.1)',
+                } 
               }}
-            />
-          </ListItem>
+            >
+              <ListItemIcon sx={{ color: theme.palette.primary.main, minWidth: 40 }}>
+                <AccountCircle />
+              </ListItemIcon>
+              <ListItemText 
+                primary="Profile" 
+                primaryTypographyProps={{ 
+                  fontFamily: "'Playfair Display', serif",
+                  fontWeight: 600,
+                  color: theme.palette.primary.main
+                }}
+              />
+            </ListItem>
+            <ListItem 
+              button 
+              onClick={handleLogout}
+              sx={{ 
+                py: 1.5,
+                '&:hover': {
+                  backgroundColor: 'rgba(244, 228, 188, 0.1)',
+                } 
+              }}
+            >
+              <ListItemIcon sx={{ color: theme.palette.primary.main, minWidth: 40 }}>
+                <Logout />
+              </ListItemIcon>
+              <ListItemText 
+                primary="Log Out" 
+                primaryTypographyProps={{ 
+                  fontFamily: "'Playfair Display', serif",
+                  fontWeight: 600,
+                  color: theme.palette.primary.main
+                }}
+              />
+            </ListItem>
+          </>
         ) : (
           <>
             <ListItem 
@@ -251,113 +261,154 @@ function Navbar() {
   );
 
   return (
-    <StyledAppBar position="static">
-      <Container maxWidth="lg">
-        <Toolbar disableGutters sx={{ py: isMobile ? 1 : 0 }}>
-          <RouterLink to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
-            <Logo variant="h1">Storia</Logo>
-          </RouterLink>
-          
-          <Box sx={{ flexGrow: 1 }} />
-          
-          {isMobile ? (
-            <>
-              <IconButton 
-                edge="end" 
-                color="primary" 
-                aria-label="menu"
-                onClick={toggleDrawer(true)}
-              >
-                <MenuIcon />
-              </IconButton>
-              <Drawer
-                anchor="right"
-                open={drawerOpen}
-                onClose={toggleDrawer(false)}
-              >
-                <DrawerList />
-              </Drawer>
-            </>
-          ) : (
-            // Desktop navigation
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              {navItems.map((item, index) => (
-                index !== 0 && (
-                  <NavButton
-                    key={item.name}
-                    component={RouterLink}
-                    to={item.path}
-                    startIcon={item.icon}
-                  >
-                    {item.name}
-                  </NavButton>
-                )
-              ))}
-              
-              {isAuthenticated ? (
-                <>
-                  <Tooltip title="Account settings">
-                    <IconButton 
-                      onClick={handleProfileMenuOpen}
-                      size="small"
-                      sx={{ ml: 2 }}
+    <>
+      <StyledAppBar position="static">
+        <Container maxWidth="lg">
+          <Toolbar disableGutters sx={{ py: isMobile ? 1 : 1.5 }}>
+            {isMobile || isTablet ? (
+              <>
+                <IconButton
+                  color="primary"
+                  aria-label="open drawer"
+                  edge="start"
+                  onClick={toggleDrawer(true)}
+                  sx={{ mr: 2 }}
+                >
+                  <MenuIcon />
+                </IconButton>
+                <RouterLink to="/" style={{ textDecoration: 'none', flexGrow: 1 }}>
+                  <Logo>Storia</Logo>
+                </RouterLink>
+              </>
+            ) : (
+              <>
+                <RouterLink to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', marginRight: theme.spacing(4) }}>
+                  <Logo>Storia</Logo>
+                </RouterLink>
+                <Box sx={{ display: 'flex', flexGrow: 1 }}>
+                  {navItems.map((item) => (
+                    <NavButton
+                      key={item.name}
+                      component={RouterLink}
+                      to={item.path}
+                      startIcon={item.icon}
                     >
-                      <Avatar 
-                        alt={user?.email} 
-                        src={user?.user_metadata?.avatar_url || ''} 
-                        sx={{ 
-                          width: 40, 
-                          height: 40,
-                          bgcolor: theme.palette.primary.main,
-                          color: theme.palette.background.default
-                        }}
-                      >
-                        {user?.email?.charAt(0).toUpperCase() || <AccountCircle />}
-                      </Avatar>
-                    </IconButton>
-                  </Tooltip>
-                  <Menu
-                    anchorEl={profileMenuAnchor}
-                    open={Boolean(profileMenuAnchor)}
-                    onClose={handleProfileMenuClose}
-                    transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-                    anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-                  >
-                    <MenuItem onClick={() => { handleProfileMenuClose(); navigate('/profile'); }}>
-                      Profile
-                    </MenuItem>
-                    <MenuItem onClick={() => { handleProfileMenuClose(); navigate('/settings'); }}>
-                      Settings
-                    </MenuItem>
-                    <Divider />
-                    <MenuItem onClick={handleLogout}>
-                      Logout
-                    </MenuItem>
-                  </Menu>
-                </>
-              ) : (
-                <Box sx={{ display: 'flex' }}>
-                  <NavButton
-                    component={RouterLink}
-                    to="/login"
-                    startIcon={<Login />}
-                  >
-                    Login
-                  </NavButton>
-                  <NavButton
-                    component={RouterLink}
-                    to="/signup"
-                    startIcon={<PersonAdd />}
-                  >
-                    Sign Up
-                  </NavButton>
+                      {item.name}
+                    </NavButton>
+                  ))}
                 </Box>
-              )}
-            </Box>
-          )}
-        </Toolbar>
-      </Container>
-    </StyledAppBar>
+              </>
+            )}
+            
+            {isAuthenticated ? (
+              <Box>
+                <Tooltip title="Account settings">
+                  <IconButton
+                    onClick={handleProfileMenuOpen}
+                    size="small"
+                    sx={{ ml: 2 }}
+                    aria-controls={Boolean(profileMenuAnchor) ? 'account-menu' : undefined}
+                    aria-haspopup="true"
+                    aria-expanded={Boolean(profileMenuAnchor) ? 'true' : undefined}
+                  >
+                    {user?.user_metadata?.avatar_url ? (
+                      <Avatar 
+                        src={user.user_metadata.avatar_url} 
+                        alt={user.user_metadata?.full_name || 'User'} 
+                        sx={{ width: 40, height: 40 }}
+                      />
+                    ) : (
+                      <Avatar sx={{ width: 40, height: 40, bgcolor: 'primary.main', color: 'background.default' }}>
+                        {user?.user_metadata?.full_name ? user.user_metadata.full_name.charAt(0).toUpperCase() : 'U'}
+                      </Avatar>
+                    )}
+                  </IconButton>
+                </Tooltip>
+                <Menu
+                  anchorEl={profileMenuAnchor}
+                  id="account-menu"
+                  open={Boolean(profileMenuAnchor)}
+                  onClose={handleProfileMenuClose}
+                  PaperProps={{
+                    sx: {
+                      mt: 1.5,
+                      backgroundColor: theme.palette.background.paper,
+                      boxShadow: theme.shadows[4],
+                    },
+                  }}
+                  transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+                  anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+                >
+                  <MenuItem 
+                    onClick={handleProfileMenuClose} 
+                    component={RouterLink} 
+                    to="/profile"
+                  >
+                    <AccountCircle sx={{ mr: 2 }} />
+                    Profile
+                  </MenuItem>
+                  <Divider />
+                  <MenuItem onClick={handleLogout}>
+                    <Logout sx={{ mr: 2 }} />
+                    Logout
+                  </MenuItem>
+                </Menu>
+              </Box>
+            ) : (
+              <Box>
+                {!isMobile && (
+                  <>
+                    <Button
+                      component={RouterLink}
+                      to="/login"
+                      variant="outlined"
+                      sx={{
+                        borderColor: theme.palette.primary.main,
+                        color: theme.palette.primary.main,
+                        mr: 1,
+                      }}
+                    >
+                      Login
+                    </Button>
+                    <Button
+                      component={RouterLink}
+                      to="/signup"
+                      variant="contained"
+                      sx={{
+                        bgcolor: theme.palette.primary.main,
+                        color: theme.palette.background.default,
+                        '&:hover': {
+                          bgcolor: theme.palette.primary.dark,
+                        },
+                      }}
+                    >
+                      Sign Up
+                    </Button>
+                  </>
+                )}
+                {isMobile && (
+                  <IconButton
+                    color="primary"
+                    aria-label="menu"
+                    edge="end"
+                    onClick={toggleDrawer(true)}
+                  >
+                    <MenuIcon />
+                  </IconButton>
+                )}
+              </Box>
+            )}
+          </Toolbar>
+        </Container>
+      </StyledAppBar>
+      <Drawer
+        anchor="left"
+        open={drawerOpen}
+        onClose={toggleDrawer(false)}
+      >
+        <DrawerList />
+      </Drawer>
+    </>
   );
 }
 

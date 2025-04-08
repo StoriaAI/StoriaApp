@@ -13,6 +13,21 @@ async function getBookById(bookId) {
 }
 
 module.exports = async (req, res) => {
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Credentials', true);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+  );
+
+  // Handle preflight OPTIONS request
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  // Only allow GET method
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -27,7 +42,38 @@ module.exports = async (req, res) => {
       if (search) params.append('search', search);
       if (page) params.append('page', page);
     }
-    const response = await axios.get(`${baseUrl}?${params.toString()}`);
+
+    // Log the request details
+    console.log(`Fetching books from: ${baseUrl}?${params.toString()}`);
+
+    let retries = 0;
+    const maxRetries = 3;
+    let response;
+
+    // Try fetching with retries
+    while (retries < maxRetries) {
+      try {
+        response = await axios.get(`${baseUrl}?${params.toString()}`, {
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Storia/1.0 (https://storia-app.vercel.app)'
+          },
+          timeout: 10000 // 10 second timeout
+        });
+        break; // If successful, exit the retry loop
+      } catch (error) {
+        retries++;
+        console.error(`Attempt ${retries} failed: ${error.message}`);
+        
+        if (retries >= maxRetries) {
+          throw error; // Give up after max retries
+        }
+        
+        // Wait before retrying (exponential backoff)
+        await new Promise(r => setTimeout(r, retries * 1000));
+      }
+    }
+
     // Transform results: try to pick a prioritized text format URL
     const transformedResults = response.data.results.map(book => {
       const formatPriorities = [
@@ -69,7 +115,12 @@ module.exports = async (req, res) => {
         languages: book.languages
       };
     });
-    res.json({
+
+    // Set response headers
+    res.setHeader('Content-Type', 'application/json');
+    
+    // Return the transformed data
+    res.status(200).json({
       count: response.data.count,
       next: response.data.next,
       previous: response.data.previous,
@@ -77,9 +128,12 @@ module.exports = async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching books:', error.message);
+    
+    // Send a proper error response
     res.status(500).json({
       error: 'Failed to fetch books',
-      details: error.message
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 }; 

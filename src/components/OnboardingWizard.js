@@ -21,7 +21,14 @@ import {
   useTheme,
   useMediaQuery,
   Autocomplete,
-  DialogActions
+  DialogActions,
+  RadioGroup,
+  Radio,
+  FormControlLabel,
+  FormLabel,
+  Grid,
+  Checkbox,
+  Paper
 } from '@mui/material';
 import { Close, PhotoCamera, ArrowBack, ArrowForward, Check } from '@mui/icons-material';
 import { supabase, updateUserProfile, getUserProfile } from '../lib/supabase';
@@ -51,6 +58,9 @@ const AI_FEATURES = [
   'Video generation'
 ];
 
+// Local storage key
+const STORAGE_KEY = 'storia_onboarding_data';
+
 const OnboardingWizard = () => {
   const { user, setShowOnboarding } = useAuth();
   const theme = useTheme();
@@ -58,20 +68,44 @@ const OnboardingWizard = () => {
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
 
   // Steps state
-  const [activeStep, setActiveStep] = useState(0);
+  const [activeStep, setActiveStep] = useState(() => {
+    // Try to get the saved step from localStorage
+    const savedData = localStorage.getItem(STORAGE_KEY);
+    if (savedData) {
+      const parsedData = JSON.parse(savedData);
+      return parsedData.step || 0;
+    }
+    return 0;
+  });
+  
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Form state
-  const [formState, setFormState] = useState({
-    firstName: '',
-    lastName: '',
-    country: '',
-    profilePhoto: null,
-    profilePhotoUrl: '',
-    selectedGenres: [],
-    selectedAiFeatures: []
+  // Form state with localStorage persistence
+  const [formState, setFormState] = useState(() => {
+    // Initial empty state
+    const initialState = {
+      firstName: '',
+      lastName: '',
+      country: '',
+      profilePhoto: null,
+      profilePhotoUrl: '',
+      selectedGenres: [],
+      selectedAiFeatures: []
+    };
+    
+    // Try to get saved data from localStorage
+    const savedData = localStorage.getItem(STORAGE_KEY);
+    if (savedData) {
+      const parsedData = JSON.parse(savedData);
+      return {
+        ...initialState,
+        ...parsedData.formData
+      };
+    }
+    
+    return initialState;
   });
 
   // File input ref
@@ -85,6 +119,21 @@ const OnboardingWizard = () => {
     profilePhoto: '',
     selectedGenres: ''
   });
+
+  // Save form state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      step: activeStep,
+      formData: {
+        firstName: formState.firstName,
+        lastName: formState.lastName,
+        country: formState.country,
+        profilePhotoUrl: formState.profilePhotoUrl,
+        selectedGenres: formState.selectedGenres,
+        selectedAiFeatures: formState.selectedAiFeatures
+      }
+    }));
+  }, [formState, activeStep]);
 
   // On component mount, check if we need to pre-populate fields from provider info
   useEffect(() => {
@@ -104,24 +153,24 @@ const OnboardingWizard = () => {
           // Pre-populate form with available data from provider
           setFormState(prev => ({
             ...prev,
-            firstName: data?.first_name || metadata.full_name?.split(' ')[0] || '',
-            lastName: data?.last_name || metadata.full_name?.split(' ').slice(1).join(' ') || '',
-            profilePhotoUrl: data?.profile_photo_url || metadata.avatar_url || '',
+            firstName: data?.first_name || metadata.full_name?.split(' ')[0] || prev.firstName || '',
+            lastName: data?.last_name || metadata.full_name?.split(' ').slice(1).join(' ') || prev.lastName || '',
+            profilePhotoUrl: data?.profile_photo_url || metadata.avatar_url || prev.profilePhotoUrl || '',
             // Don't clear other fields if they exist in the database
-            country: data?.country || prev.country,
-            selectedGenres: data?.preferred_genres || prev.selectedGenres,
-            selectedAiFeatures: data?.ai_preferences || prev.selectedAiFeatures
+            country: data?.country || prev.country || '',
+            selectedGenres: data?.preferred_genres || prev.selectedGenres || [],
+            selectedAiFeatures: data?.ai_preferences || prev.selectedAiFeatures || []
           }));
         } else if (data) {
           // Use data from database if it exists
           setFormState(prev => ({
             ...prev,
-            firstName: data.first_name || '',
-            lastName: data.last_name || '',
-            country: data.country || '',
-            profilePhotoUrl: data.profile_photo_url || '',
-            selectedGenres: data.preferred_genres || [],
-            selectedAiFeatures: data.ai_preferences || []
+            firstName: data.first_name || prev.firstName || '',
+            lastName: data.last_name || prev.lastName || '',
+            country: data.country || prev.country || '',
+            profilePhotoUrl: data.profile_photo_url || prev.profilePhotoUrl || '',
+            selectedGenres: data.preferred_genres || prev.selectedGenres || [],
+            selectedAiFeatures: data.ai_preferences || prev.selectedAiFeatures || []
           }));
         }
       } catch (err) {
@@ -176,24 +225,49 @@ const OnboardingWizard = () => {
     setFormErrors(prev => ({ ...prev, profilePhoto: '' }));
   };
 
-  // Handle genre selection
-  const handleGenreChange = (_, newValue) => {
-    // Limit to max 7 selections
-    if (newValue.length <= 7) {
-      setFormState(prev => ({ ...prev, selectedGenres: newValue }));
-      // Clear error if at least 5 genres selected
-      if (newValue.length >= 5) {
-        setFormErrors(prev => ({ ...prev, selectedGenres: '' }));
+  // Handle genre selection with checkboxes
+  const handleGenreToggle = (genre) => {
+    setFormState(prev => {
+      const currentGenres = [...prev.selectedGenres];
+      
+      if (currentGenres.includes(genre)) {
+        // Remove genre if already selected
+        const updatedGenres = currentGenres.filter(g => g !== genre);
+        return { ...prev, selectedGenres: updatedGenres };
+      } else {
+        // Add genre if not already selected and under the limit of 7
+        if (currentGenres.length < 7) {
+          const updatedGenres = [...currentGenres, genre];
+          return { ...prev, selectedGenres: updatedGenres };
+        }
+        return prev; // Already at max selections
       }
+    });
+    
+    // Clear error if at least 5 genres selected
+    if (formState.selectedGenres.length >= 4) { // Will be 5 after toggling
+      setFormErrors(prev => ({ ...prev, selectedGenres: '' }));
     }
   };
 
-  // Handle AI features selection
-  const handleAiFeaturesChange = (_, newValue) => {
-    // Limit to max 5 selections
-    if (newValue.length <= 5) {
-      setFormState(prev => ({ ...prev, selectedAiFeatures: newValue }));
-    }
+  // Handle AI features selection with checkboxes
+  const handleAiFeatureToggle = (feature) => {
+    setFormState(prev => {
+      const currentFeatures = [...prev.selectedAiFeatures];
+      
+      if (currentFeatures.includes(feature)) {
+        // Remove feature if already selected
+        const updatedFeatures = currentFeatures.filter(f => f !== feature);
+        return { ...prev, selectedAiFeatures: updatedFeatures };
+      } else {
+        // Add feature if not already selected and under the limit of 5
+        if (currentFeatures.length < 5) {
+          const updatedFeatures = [...currentFeatures, feature];
+          return { ...prev, selectedAiFeatures: updatedFeatures };
+        }
+        return prev; // Already at max selections
+      }
+    });
   };
 
   // Validate personal info step
@@ -281,6 +355,9 @@ const OnboardingWizard = () => {
       });
       
       if (updateError) throw updateError;
+      
+      // Clear localStorage after successful save
+      localStorage.removeItem(STORAGE_KEY);
       
       // Close the onboarding wizard
       setShowOnboarding(false);
@@ -525,7 +602,7 @@ const OnboardingWizard = () => {
           </Box>
         )}
         
-        {/* Step 2: Book Genres */}
+        {/* Step 2: Book Genres - Now with checkbox grid instead of autocomplete */}
         {activeStep === 1 && (
           <Box>
             <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
@@ -536,31 +613,49 @@ const OnboardingWizard = () => {
               Select at least 5 and up to 7 genres that interest you.
             </Typography>
             
-            <Autocomplete
-              multiple
-              id="genre-selector"
-              options={BOOK_GENRES}
-              value={formState.selectedGenres}
-              onChange={handleGenreChange}
-              renderInput={(params) => (
-                <TextField 
-                  {...params} 
-                  label="Book Genres" 
-                  error={!!formErrors.selectedGenres}
-                  helperText={formErrors.selectedGenres}
-                />
-              )}
-              renderTags={(value, getTagProps) =>
-                value.map((option, index) => (
-                  <Chip
-                    label={option}
-                    {...getTagProps({ index })}
-                    sx={{ m: 0.5 }}
-                  />
-                ))
-              }
-              sx={{ mb: 2 }}
-            />
+            {formErrors.selectedGenres && (
+              <Typography color="error" variant="body2" sx={{ mb: 2 }}>
+                {formErrors.selectedGenres}
+              </Typography>
+            )}
+            
+            <Box sx={{ maxHeight: '400px', overflow: 'auto', pb: 2 }}>
+              <Grid container spacing={1}>
+                {BOOK_GENRES.map((genre) => (
+                  <Grid item xs={12} sm={6} md={4} key={genre}>
+                    <Paper
+                      elevation={1}
+                      sx={{
+                        p: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        cursor: 'pointer',
+                        bgcolor: formState.selectedGenres.includes(genre) 
+                          ? 'rgba(156, 39, 176, 0.1)' 
+                          : 'background.paper',
+                        border: 1,
+                        borderColor: formState.selectedGenres.includes(genre)
+                          ? 'primary.main'
+                          : 'divider',
+                        borderRadius: 1,
+                        '&:hover': {
+                          bgcolor: 'rgba(156, 39, 176, 0.05)',
+                        }
+                      }}
+                      onClick={() => handleGenreToggle(genre)}
+                    >
+                      <Checkbox 
+                        checked={formState.selectedGenres.includes(genre)}
+                        color="primary"
+                        size="small"
+                        sx={{ p: 0.5, mr: 1 }}
+                      />
+                      <Typography variant="body2">{genre}</Typography>
+                    </Paper>
+                  </Grid>
+                ))}
+              </Grid>
+            </Box>
             
             <FormHelperText>
               {formState.selectedGenres.length}/7 genres selected
@@ -570,7 +665,7 @@ const OnboardingWizard = () => {
           </Box>
         )}
         
-        {/* Step 3: AI Features */}
+        {/* Step 3: AI Features - Now with checkbox grid instead of autocomplete */}
         {activeStep === 2 && (
           <Box>
             <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
@@ -581,28 +676,42 @@ const OnboardingWizard = () => {
               Select which AI features you'd like to enable (up to 5). You can change these settings later.
             </Typography>
             
-            <Autocomplete
-              multiple
-              id="ai-features-selector"
-              options={AI_FEATURES}
-              value={formState.selectedAiFeatures}
-              onChange={handleAiFeaturesChange}
-              renderInput={(params) => (
-                <TextField {...params} label="AI Features" />
-              )}
-              renderTags={(value, getTagProps) =>
-                value.map((option, index) => (
-                  <Chip
-                    label={option}
-                    {...getTagProps({ index })}
-                    sx={{ m: 0.5 }}
-                  />
-                ))
-              }
-              sx={{ mb: 2 }}
-            />
+            <Grid container spacing={2}>
+              {AI_FEATURES.map((feature) => (
+                <Grid item xs={12} sm={6} key={feature}>
+                  <Paper
+                    elevation={1}
+                    sx={{
+                      p: 1.5,
+                      display: 'flex',
+                      alignItems: 'center',
+                      cursor: 'pointer',
+                      bgcolor: formState.selectedAiFeatures.includes(feature) 
+                        ? 'rgba(156, 39, 176, 0.1)' 
+                        : 'background.paper',
+                      border: 1,
+                      borderColor: formState.selectedAiFeatures.includes(feature)
+                        ? 'primary.main'
+                        : 'divider',
+                      borderRadius: 1,
+                      '&:hover': {
+                        bgcolor: 'rgba(156, 39, 176, 0.05)',
+                      }
+                    }}
+                    onClick={() => handleAiFeatureToggle(feature)}
+                  >
+                    <Checkbox 
+                      checked={formState.selectedAiFeatures.includes(feature)}
+                      color="primary"
+                      sx={{ mr: 1 }}
+                    />
+                    <Typography>{feature}</Typography>
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
             
-            <FormHelperText>
+            <FormHelperText sx={{ mt: 2 }}>
               {formState.selectedAiFeatures.length}/5 features selected (optional)
             </FormHelperText>
           </Box>
