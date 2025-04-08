@@ -1,84 +1,94 @@
-# Fixing "Error 400: redirect_uri_mismatch" in Google Authentication
+# Fixing Google OAuth Redirect URI Mismatch Errors
 
-This document provides step-by-step instructions to fix the "redirect_uri_mismatch" error that occurs during Google authentication.
+This document provides step-by-step instructions to fix the common `redirect_uri_mismatch` error that occurs with Google OAuth authentication in the Storia application.
 
-## What Causes This Error?
+## Understanding the Problem
 
-The `redirect_uri_mismatch` error occurs when the redirect URL provided during authentication doesn't match any of the authorized redirect URIs configured in your Google Cloud Console. This is a security measure to prevent malicious redirects.
+The `redirect_uri_mismatch` error occurs when:
 
-## Steps to Fix the Error
+1. The redirect URI that your application sends to Google during the OAuth process
+2. Does not match any of the authorized redirect URIs you've configured in the Google Cloud Console
 
-### 1. Determine the Exact Redirect URL Being Used
+This is a security feature by Google to prevent OAuth phishing attacks.
 
-Check the browser console to see what redirect URL is being used:
+## Solution Steps
 
-1. Open your browser's developer tools (F12 or Right-click → Inspect)
-2. Go to the Console tab
-3. Look for logs like "Using hardcoded production redirect URL: https://your-app.vercel.app"
+### 1. Check the Production URL in the codebase
 
-### 2. Update Google Cloud Console Configuration
-
-1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
-2. Select your project
-3. Navigate to "APIs & Services" → "Credentials"
-4. Find and edit your OAuth 2.0 Client ID
-
-### 3. Add All Necessary Redirect URIs
-
-Add **ALL** of these redirect URIs (adjust the domain to match your actual production URL):
-
-```
-https://storia-app.vercel.app
-https://storia-app.vercel.app/
-https://storia-app.vercel.app/login
-https://storia-app.vercel.app/signup
-https://slvxbqfzfsdufulepitc.supabase.co/auth/v1/callback
-```
-
-**IMPORTANT NOTES:**
-- Include both versions with and without trailing slashes
-- Include the exact Supabase callback URL (get this from your Supabase dashboard)
-- Make sure the URLs match exactly (case sensitive, including http vs https)
-
-### 4. Update Your Hardcoded Redirect URL
-
-Ensure the hardcoded redirect URL in your code exactly matches one of the URIs you added to Google Cloud Console:
+The application has a hardcoded production URL in `src/lib/supabase.js`:
 
 ```javascript
-// In src/lib/supabase.js
-const hardcodedProductionUrl = "https://storia-app.vercel.app"; // Must match Google console
+export const PRODUCTION_URL = 'https://joinstoria.vercel.app';
 ```
 
-### 5. Update Supabase Configuration
+This URL **must match exactly** where your application is deployed.
 
-1. Go to your Supabase dashboard
-2. Navigate to Authentication → URL Configuration
-3. Set Site URL to your production URL (e.g., `https://storia-app.vercel.app`)
-4. Add Redirect URLs that include both your production URL and localhost:
+### 2. Configure Google Cloud Console
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Navigate to your project → APIs & Services → Credentials
+3. Find and edit your OAuth 2.0 Client ID
+4. Under "Authorized redirect URIs", add the following URIs:
+
+   **For Production:**
    ```
-   https://storia-app.vercel.app/**
-   http://localhost:3000/**
+   https://joinstoria.vercel.app
+   https://joinstoria.vercel.app/auth/callback
+   https://joinstoria.vercel.app/auth/v2/callback
    ```
 
-### 6. Clear Browser Data and Try Again
+   **For Local Development:**
+   ```
+   http://localhost:3000
+   http://localhost:3000/auth/callback
+   http://localhost:3000/auth/v2/callback
+   ```
 
-1. Clear browser cookies and local storage for your domain
-2. Try signing in with Google again
+5. Save your changes
 
-## Additional Troubleshooting
+### 3. Verify Environment Variables
 
-If you still encounter issues:
+Make sure your `.env` file (locally) and Vercel environment variables (in production) have the correct Supabase settings:
 
-1. **Check for HTTP vs HTTPS mismatches**: Make sure you're using HTTPS for production URLs.
-2. **Verify port numbers**: If using a non-standard port in development, include it in your authorized redirect URIs.
-3. **Check for subdomain issues**: `www.yourdomain.com` and `yourdomain.com` are treated as different domains.
-4. **Restart your development server**: Changes to environment variables require a server restart.
-5. **Test in an incognito/private browsing window**: This eliminates cached credentials issues.
+```
+REACT_APP_SUPABASE_URL=https://your-project-id.supabase.co
+REACT_APP_SUPABASE_PUBLIC_KEY=your-supabase-anon-key
+```
 
-## Common Mistakes
+### 4. Configure Supabase Authentication Settings
 
-- Not including both versions (with/without trailing slash)
-- Using different protocols (http vs https)
-- Not including the exact Supabase callback URL
-- Typos in the URL (Google's validation is exact-match)
-- Having redirects to localhost in production environment 
+1. Go to your [Supabase Dashboard](https://app.supabase.com/)
+2. Navigate to your project → Authentication → URL Configuration
+3. Set the Site URL to: `https://joinstoria.vercel.app` (for production)
+4. Under "Redirect URLs", add:
+   ```
+   https://joinstoria.vercel.app
+   https://joinstoria.vercel.app/auth/callback
+   https://joinstoria.vercel.app/auth/v2/callback
+   http://localhost:3000
+   http://localhost:3000/auth/callback
+   http://localhost:3000/auth/v2/callback
+   ```
+5. Save your changes
+
+### 5. Clear Browser Data (If Needed)
+
+If you're still experiencing issues after making these changes:
+
+1. Clear your browser cookies and localStorage
+2. Try signing in with Google in an incognito/private window
+3. Check browser console for any specific error messages
+
+## Troubleshooting
+
+If you're still experiencing issues:
+
+1. **Check Network Requests**: When initiating Google sign-in, check the Network tab in your browser's Developer Tools. Look for the redirect URL being sent to Google.
+
+2. **Verify Google Project Configuration**: Make sure your Google Cloud Project has the Google+ API enabled.
+
+3. **Check for URL Typos**: Ensure there are no typos or trailing slashes in your URIs - they must match exactly.
+
+4. **Verify Supabase Client Configuration**: Check that the `signInWithGoogle` function in `src/lib/supabase.js` is using the correct redirect URL.
+
+If you continue to experience issues, please check the [Supabase Authentication Documentation](https://supabase.com/docs/guides/auth) or open an issue in the Storia repository. 

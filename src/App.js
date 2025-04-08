@@ -17,6 +17,8 @@ import { CircularProgress, Box } from '@mui/material';
 import { supabase } from './lib/supabase';
 import { debugAuth, handleHashRedirect } from './util/debugAuth';
 import { debugOAuthRedirects, fixOAuthRedirectIssues } from './util/debugOAuth';
+import AuthCallback from './components/auth/AuthCallback';
+import AuthStatus from './pages/Auth/AuthStatus';
 
 // Create a base theme with dark mode settings
 let theme = createTheme({
@@ -103,6 +105,32 @@ const HandleOAuthRedirect = () => {
   const location = useLocation();
   
   useEffect(() => {
+    // CRITICAL: Check if we're mistakenly on localhost in production
+    const isProduction = process.env.NODE_ENV === 'production';
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    
+    if (isProduction && isLocalhost) {
+      console.error('🚨 CRITICAL ERROR: Detected localhost in production environment!');
+      
+      // Only redirect if this appears to be an OAuth callback (has hash with tokens)
+      if (window.location.hash && (
+          window.location.hash.includes('access_token') || 
+          window.location.hash.includes('error=')
+      )) {
+        console.error('OAuth redirect to localhost detected in production - redirecting to production URL');
+        
+        const productionUrl = 'https://joinstoria.vercel.app';
+        const redirectUrl = productionUrl + 
+          window.location.pathname + 
+          window.location.search + 
+          window.location.hash;
+        
+        console.log('Redirecting to:', redirectUrl);
+        window.location.replace(redirectUrl);
+        return;
+      }
+    }
+  
     // Check if there's a hash in the URL (common for OAuth redirects)
     if (location.hash || location.search) {
       console.log('Detected potential auth redirect in HandleOAuthRedirect component');
@@ -205,6 +233,11 @@ const AppContent = () => {
               </PublicRoute>
             } 
           />
+          {/* Auth Routes */}
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/auth/v2/callback" element={<AuthCallback />} />
+          <Route path="/auth/status" element={<AuthStatus />} />
+          
           <Route 
             path="/books" 
             element={

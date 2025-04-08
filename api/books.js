@@ -56,7 +56,7 @@ module.exports = async (req, res) => {
         response = await axios.get(`${baseUrl}?${params.toString()}`, {
           headers: {
             'Accept': 'application/json',
-            'User-Agent': 'Storia/1.0 (https://storia-app.vercel.app)'
+            'User-Agent': 'Storia/1.0 (https://joinstoria.vercel.app)'
           },
           timeout: 10000 // 10 second timeout
         });
