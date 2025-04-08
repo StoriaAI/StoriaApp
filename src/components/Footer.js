@@ -1,5 +1,6 @@
 import React from 'react';
-import { Box, Container, Typography, Link, useTheme, useMediaQuery } from '@mui/material';
+import { Box, Container, Typography, Link, useTheme, useMediaQuery, Grid } from '@mui/material';
+import '../styles/Footer.css';
 
 const Footer = () => {
   const theme = useTheme();

@@ -3,12 +3,12 @@
   "version": "1.0.0",
   "description": "An AI-powered platform for immersive book reading with dynamic soundscapes",
   "scripts": {
-    "start": "react-scripts start",
+    "start": "set PORT=3001 && react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "server": "node server/index.js",
-    "dev": "concurrently \"npm run server\" \"npm start\"",
+    "server": "set PORT=3000 && node server/index.js",
+    "dev": "concurrently \"npm run server\" \"npm run start\"",
     "vercel-build": "react-scripts build"
   },
   "dependencies": {
@@ -23,11 +23,13 @@
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
+    "http-proxy-middleware": "^2.0.7",
     "openai": "^4.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.11.1",
-    "react-scripts": "5.0.1"
+    "react-scripts": "5.0.1",
+    "storia": "file:"
   },
   "devDependencies": {
     "concurrently": "^8.0.1",

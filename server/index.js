@@ -4,7 +4,7 @@ const axios = require('axios');
 const cors = require('cors');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
@@ -373,6 +373,7 @@ app.post('/api/generate-music', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+  console.log(`API available at: http://localhost:${PORT}/api/books`);
   
   // Log all registered routes
   console.log('Registered endpoints:');
@@ -383,4 +384,11 @@ app.listen(PORT, () => {
       });
     }
   });
+}).on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use. Please make sure no other service is running on this port.`);
+  } else {
+    console.error('Server error:', err);
+  }
+  process.exit(1);
 });
