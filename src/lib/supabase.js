@@ -153,10 +153,6 @@ export const signInWithGoogle = async () => {
     const redirectUrl = 'https://joinstoria.vercel.app/auth/callback'; // Always use production URL
     
     debugLog('Final redirect URL:', redirectUrl);
-    debugLog('Supabase Site URL (from client):', supabase.auth.getAutoRefreshToken()?.siteUrl);
-    
-    // Generate a unique state parameter to help debug OAuth flow
-    const stateParam = `storia_${Date.now()}`;
     
     // Force the redirectTo URL to override Supabase's site URL setting
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -164,9 +160,7 @@ export const signInWithGoogle = async () => {
       options: {
         redirectTo: redirectUrl, // Use explicit absolute URL with protocol
         queryParams: {
-          prompt: 'consent',
-          state: stateParam, // Add unique state for tracking
-          _t: Date.now() // Add cache-busting timestamp
+          prompt: 'consent'
         },
         skipBrowserRedirect: false
       }
@@ -177,10 +171,6 @@ export const signInWithGoogle = async () => {
     } else {
       debugLog('OAuth sign-in initiated successfully');
       debugLog('Provider URL:', data?.url || 'No URL returned');
-      // Store the state parameter in localStorage for verification on return
-      if (typeof window !== 'undefined' && data?.url) {
-        localStorage.setItem('storia_oauth_state', stateParam);
-      }
     }
     
     console.groupEnd();
@@ -250,16 +240,6 @@ export const handleAuthRedirect = () => {
     debugLog('Auth hash detected in URL, handling redirect');
     
     try {
-      const hashParams = new URLSearchParams(window.location.hash.substring(1));
-      const state = hashParams.get('state');
-      const storedState = localStorage.getItem('storia_oauth_state');
-      
-      if (state && storedState && state === storedState) {
-        debugLog('OAuth state verified successfully');
-      } else if (state) {
-        debugLog('OAuth state mismatch or missing stored state');
-      }
-      
       const { data, error } = supabase.auth.getSessionFromUrl();
       
       if (error) {
@@ -268,14 +248,31 @@ export const handleAuthRedirect = () => {
         debugLog('Successfully processed auth redirect');
       }
       
-      // Clean up stored state
-      localStorage.removeItem('storia_oauth_state');
-      
       return { data, error };
     } catch (err) {
       console.error('Exception handling auth redirect:', err);
       return { data: null, error: err };
     }
+  }
+  
+  // Check for error parameters in the URL
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('error')) {
+    const error = {
+      error: urlParams.get('error'),
+      error_code: urlParams.get('error_code'),
+      error_description: urlParams.get('error_description')
+    };
+    console.error('OAuth error detected in URL:', error);
+    
+    // If we're on localhost in production, force redirect to production
+    if (isLocalhost && isProduction) {
+      const productionUrl = 'https://joinstoria.vercel.app';
+      window.location.replace(productionUrl);
+      return { data: null, error };
+    }
+    
+    return { data: null, error };
   }
   
   return { data: null, error: null };
@@ -373,4 +370,53 @@ export const checkForLocalhostRedirectIssue = () => {
   }
   
   return false;
-}; 
+};
+
+// Create a custom callback handler for OAuth authentication
+export const setupOAuth = () => {
+  if (typeof window === 'undefined') return;
+  
+  // If we're running with a bad_oauth_state error, clear URL params and try again
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('error_code') === 'bad_oauth_state') {
+    console.warn('Detected bad_oauth_state error, clearing URL and resetting state');
+    const cleanUrl = window.location.origin + window.location.pathname;
+    window.history.replaceState(null, document.title, cleanUrl);
+    
+    // Redirect to production URL if we're on localhost
+    if (isLocalhost && isProduction) {
+      window.location.replace('https://joinstoria.vercel.app');
+    }
+    
+    // Clear any auth-related localStorage items that might be causing issues
+    localStorage.removeItem('supabase.auth.token');
+    localStorage.removeItem('storia_oauth_state');
+    localStorage.removeItem('supabase-auth-token');
+    
+    // Wait a moment before redirecting
+    return;
+  }
+  
+  // Listen for auth state changes to handle redirects more gracefully
+  supabase.auth.onAuthStateChange((event, session) => {
+    debugLog('Auth state changed:', event);
+    
+    if (event === 'SIGNED_IN') {
+      // Ensure we're on the production domain in production environment
+      if (isProduction && isLocalhost) {
+        window.location.replace('https://joinstoria.vercel.app');
+      }
+      
+      // Clean up URL after successful sign-in
+      if (window.location.hash || window.location.search.includes('access_token')) {
+        const cleanUrl = window.location.origin + window.location.pathname;
+        window.history.replaceState(null, document.title, cleanUrl);
+      }
+    }
+  });
+};
+
+// Call the setup function
+if (typeof window !== 'undefined') {
+  setupOAuth();
+} 

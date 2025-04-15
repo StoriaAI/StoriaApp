@@ -11,6 +11,27 @@ export const AuthProvider = ({ children }) => {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [error, setError] = useState(null);
 
+  // Immediately check and fix any redirect issues
+  useEffect(() => {
+    // If we've detected a bad OAuth state error, handle it
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('error_code') === 'bad_oauth_state') {
+      console.warn('Detected bad_oauth_state error in AuthContext, clearing URL and resetting auth state');
+      // Clear the URL
+      window.history.replaceState(null, document.title, window.location.origin + window.location.pathname);
+      
+      // Force redirect to production if needed
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const isProduction = process.env.NODE_ENV === 'production';
+      
+      if (isProduction && isLocalhost) {
+        console.warn('Redirecting from localhost to production domain after auth error');
+        window.location.replace('https://joinstoria.vercel.app');
+        return;
+      }
+    }
+  }, []);
+
   // Function to check if a user needs to complete onboarding
   const checkOnboardingStatus = async (userId) => {
     try {
@@ -166,14 +187,9 @@ export const AuthProvider = ({ children }) => {
       
       // CRITICAL: Always use absolute URLs with https:// for production
       // This must match exactly what's registered in Google Cloud Console
-      const redirectTo = process.env.NODE_ENV === 'production'
-        ? 'https://joinstoria.vercel.app/auth/callback' // Explicit absolute URL
-        : `${window.location.origin}/auth/callback`;
+      const redirectTo = 'https://joinstoria.vercel.app/auth/callback'; // Always use production URL
       
       console.log('Using redirect URL:', redirectTo);
-      
-      // Generate a unique state parameter to help debug OAuth flow
-      const stateParam = `storia_${Date.now()}`;
       
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -181,20 +197,13 @@ export const AuthProvider = ({ children }) => {
           redirectTo, // Use our explicit redirect URL
           queryParams: {
             access_type: 'offline',
-            prompt: 'consent',
-            state: stateParam, // Add unique state for tracking
-            _t: Date.now() // Add cache-busting timestamp
+            prompt: 'consent'
           }
         }
       });
       
       if (error) {
         throw error;
-      }
-      
-      // Store the state parameter in localStorage for verification on return
-      if (typeof window !== 'undefined' && data?.url) {
-        localStorage.setItem('storia_oauth_state', stateParam);
       }
       
       console.log('Google auth initiated successfully, redirecting to:', data.url);
