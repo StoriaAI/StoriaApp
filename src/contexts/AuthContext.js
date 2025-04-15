@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import { supabase, getCurrentUser, getSession, handleAuthRedirect, PRODUCTION_URL } from '../lib/supabase';
+import { supabase, getCurrentUser, getSession, handleAuthRedirect, PRODUCTION_URL, checkForLocalhostRedirectIssue } from '../lib/supabase';
 
 const AuthContext = createContext();
 
@@ -19,19 +19,35 @@ export const AuthProvider = ({ children }) => {
       // Check if the user needs to complete onboarding
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('has_completed_onboarding')
+        .select('has_completed_onboarding, created_at')
         .eq('user_id', userId)
         .single();
       
-      // Show onboarding if profile doesn't exist or hasn't completed onboarding
-      if (error || !data || !data.has_completed_onboarding) {
-        console.log('User needs to complete onboarding:', userId);
+      if (error) {
+        // Profile doesn't exist yet - this is a new user
+        console.log('User profile not found, needs onboarding:', userId);
         setShowOnboarding(true);
         return true;
-      } else {
-        setShowOnboarding(false);
-        return false;
+      } 
+      
+      if (!data) {
+        // No profile data - new user
+        console.log('No profile data, needs onboarding:', userId);
+        setShowOnboarding(true);
+        return true;
       }
+      
+      if (!data.has_completed_onboarding) {
+        // User exists but hasn't completed onboarding
+        console.log('User exists but needs to complete onboarding:', userId);
+        setShowOnboarding(true);
+        return true;
+      }
+      
+      // User exists and has completed onboarding
+      console.log('User has already completed onboarding:', userId);
+      setShowOnboarding(false);
+      return false;
     } catch (err) {
       console.error('Error checking onboarding status:', err);
       return false;
@@ -71,6 +87,13 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
+    // Check for localhost redirect issue in production
+    const hasRedirectIssue = checkForLocalhostRedirectIssue();
+    if (hasRedirectIssue) {
+      // If we detected and handled a redirect issue, stop execution
+      return;
+    }
+
     // Check current session and subscribe to auth changes
     const checkSession = async () => {
       try {

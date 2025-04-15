@@ -150,9 +150,7 @@ export const signInWithGoogle = async () => {
     // CRITICAL: Always use the FULL production URL in production
     // This must match the exact URL registered in Google Cloud Console
     // Using ABSOLUTE URL with https:// is critical
-    const redirectUrl = isProduction 
-      ? 'https://joinstoria.vercel.app/auth/callback' // Absolute URL with protocol
-      : getSiteUrl() + '/auth/callback';
+    const redirectUrl = 'https://joinstoria.vercel.app/auth/callback'; // Always use production URL
     
     debugLog('Final redirect URL:', redirectUrl);
     debugLog('Supabase Site URL (from client):', supabase.auth.getAutoRefreshToken()?.siteUrl);
@@ -351,4 +349,28 @@ export const hasCompletedOnboarding = async (userId) => {
     console.error('Exception checking onboarding status:', err);
     return false;
   }
+};
+
+// Check if we're on localhost but in production environment
+export const checkForLocalhostRedirectIssue = () => {
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const productionUrl = 'https://joinstoria.vercel.app';
+  
+  // If we're on localhost but have a production flag in localStorage, this is likely a redirect issue
+  const isRedirectIssue = isLocalhost && localStorage.getItem('storia_env') === 'production';
+  
+  if (isRedirectIssue) {
+    console.warn('Detected localhost in production environment - redirect issue detected');
+    
+    // Force redirect to production URL
+    window.location.href = productionUrl + window.location.pathname + window.location.search + window.location.hash;
+    return true;
+  }
+  
+  // Set environment flag for future checks
+  if (isProduction) {
+    localStorage.setItem('storia_env', 'production');
+  }
+  
+  return false;
 }; 

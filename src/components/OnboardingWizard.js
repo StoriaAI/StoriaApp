@@ -341,6 +341,10 @@ const OnboardingWizard = () => {
         profileImageUrl = publicUrl;
       }
       
+      // Check if the user already has a profile
+      const { data: existingProfile } = await getUserProfile(user.id);
+      const isNewUser = !existingProfile;
+      
       // Save profile data
       const { error: updateError } = await updateUserProfile(user.id, {
         first_name: formState.firstName,
@@ -350,7 +354,7 @@ const OnboardingWizard = () => {
         preferred_genres: formState.selectedGenres,
         ai_preferences: formState.selectedAiFeatures,
         has_completed_onboarding: true,
-        created_at: new Date().toISOString(),
+        created_at: isNewUser ? new Date().toISOString() : existingProfile.created_at,
         updated_at: new Date().toISOString()
       });
       
