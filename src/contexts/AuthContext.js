@@ -37,40 +37,55 @@ export const AuthProvider = ({ children }) => {
     try {
       if (!userId) return false;
       
-      // Check if the user needs to complete onboarding
+      console.log('Checking onboarding status for user ID:', userId);
+      
+      // Check for an existing profile with onboarding completed
       const { data, error } = await supabase
         .from('user_profiles')
         .select('has_completed_onboarding, created_at')
         .eq('user_id', userId)
+        .eq('has_completed_onboarding', true)
         .single();
       
-      if (error) {
-        // Profile doesn't exist yet - this is a new user
+      // If we find a profile with has_completed_onboarding = true, user has completed onboarding
+      if (!error && data) {
+        console.log('User has already completed onboarding:', userId);
+        setShowOnboarding(false);
+        return false;
+      }
+      
+      // If we reach here, either no profile exists or has_completed_onboarding is false or null
+      // Check if any profile exists at all (could be duplicate with has_completed_onboarding = false)
+      const { data: anyProfile, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('id, has_completed_onboarding')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      
+      if (profileError) {
+        console.log('Error checking for any profile:', profileError.message);
+        // Error when querying - likely no profile exists
         console.log('User profile not found, needs onboarding:', userId);
         setShowOnboarding(true);
         return true;
-      } 
+      }
       
-      if (!data) {
-        // No profile data - new user
-        console.log('No profile data, needs onboarding:', userId);
+      if (!anyProfile || anyProfile.length === 0) {
+        // No profile exists at all
+        console.log('No profile data found, user needs onboarding:', userId);
         setShowOnboarding(true);
         return true;
       }
       
-      if (!data.has_completed_onboarding) {
-        // User exists but hasn't completed onboarding
-        console.log('User exists but needs to complete onboarding:', userId);
-        setShowOnboarding(true);
-        return true;
-      }
-      
-      // User exists and has completed onboarding
-      console.log('User has already completed onboarding:', userId);
-      setShowOnboarding(false);
-      return false;
+      // Profile exists but has_completed_onboarding is false
+      console.log('User exists but needs to complete onboarding:', userId);
+      setShowOnboarding(true);
+      return true;
     } catch (err) {
       console.error('Error checking onboarding status:', err);
+      // Default to not showing onboarding on error
+      setShowOnboarding(false);
       return false;
     }
   };

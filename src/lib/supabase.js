@@ -282,18 +282,49 @@ export const handleAuthRedirect = () => {
 export const updateUserProfile = async (userId, profileData) => {
   try {
     debugLog('Updating profile for user:', userId);
+    
+    // First, check if the user already has a profile
+    const { data: existingProfile } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+    
+    // If we have an existing profile, use an update operation
+    if (!existingProfile?.error && existingProfile) {
+      debugLog('Existing profile found, updating with id:', userId);
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .update({ 
+          ...profileData,
+          updated_at: new Date().toISOString() 
+        })
+        .eq('user_id', userId);
+      
+      if (error) {
+        debugLog('Error updating existing user profile:', error.message);
+      } else {
+        debugLog('Profile updated successfully');
+      }
+      
+      return { data, error };
+    }
+    
+    // If no profile exists, use an insert operation
+    debugLog('No existing profile found, creating new profile for user:', userId);
     const { data, error } = await supabase
       .from('user_profiles')
-      .upsert({ 
+      .insert({ 
         user_id: userId,
         ...profileData,
+        created_at: profileData.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString() 
       });
     
     if (error) {
-      debugLog('Error updating user profile:', error.message);
+      debugLog('Error creating user profile:', error.message);
     } else {
-      debugLog('Profile updated successfully');
+      debugLog('Profile created successfully');
     }
     
     return { data, error };
