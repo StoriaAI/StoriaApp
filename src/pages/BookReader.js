@@ -56,7 +56,8 @@ function BookReader() {
   const [loadingMessage, setLoadingMessage] = useState('Preparing your immersive reading experience...');
   const audioRef = useRef(null);
   const nextPagesToGenerate = useRef([]);
-  const MIN_PAGES_TO_LOAD = 3; // Minimum pages to load before showing content
+  const MIN_PAGES_TO_LOAD = 3; // Base minimum pages to load
+  const LOOK_AHEAD_BUFFER = 3; // How many pages ahead to pre-generate music
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
@@ -162,11 +163,14 @@ function BookReader() {
     
     // Generate music for all pages in the initial buffer
     let generatedCount = 0;
-    const pagesToGenerate = bufferSize;
     
-    console.log(`Generating music for initial buffer of ${pagesToGenerate} pages`);
+    console.log(`Generating music for initial buffer of ${bufferSize} pages`);
     
-    for (let i = 0; i < pagesToGenerate; i++) {
+    // We'll generate for the buffer, focusing on the current page and ones ahead
+    const startPage = Math.max(0, page - 1); // Include current page and one before if possible
+    const endPage = Math.min(startPage + bufferSize - 1, totalPages - 1);
+    
+    for (let i = startPage; i <= endPage; i++) {
       if (!pageStore[i] || !pageStore[i].trim()) {
         // If we don't have content, fetch it first
         console.log(`Fetching missing content for page ${i}`);
@@ -175,14 +179,15 @@ function BookReader() {
       
       if ((pageStore[i] || pageContents[i]) && !cachedMusic[i]) {
         try {
-          setLoadingProgress(Math.round((generatedCount / pagesToGenerate) * 100));
-          setLoadingMessage(`Generating music for page ${i+1}/${pagesToGenerate}...`);
+          const progress = Math.round(((i - startPage + 1) / (endPage - startPage + 1)) * 100);
+          setLoadingProgress(progress);
+          setLoadingMessage(`Generating music for page ${i+1}/${endPage+1}...`);
           
           await generateMusicForPage(i, pageStore[i] || pageContents[i]);
           generatedCount++;
-          console.log(`Generated music for initial buffer page ${i} (${generatedCount}/${pagesToGenerate})`);
+          console.log(`Generated music for buffer page ${i} (${generatedCount}/${bufferSize})`);
         } catch (err) {
-          console.error(`Failed to generate music for initial buffer page ${i}:`, err);
+          console.error(`Failed to generate music for buffer page ${i}:`, err);
         }
       } else {
         console.log(`Skipping music generation for page ${i} (already cached or no content)`);
@@ -198,8 +203,8 @@ function BookReader() {
     // Clear any existing queue first
     nextPagesToGenerate.current = [];
     
-    // Buffer size is fixed at 3 pages
-    const bufferSize = MIN_PAGES_TO_LOAD;
+    // Use a dynamic buffer centered around the current page
+    const bufferSize = LOOK_AHEAD_BUFFER;
     const endPage = Math.min(startPage + bufferSize - 1, totalPages - 1);
     
     // Queue up the next set of pages
@@ -222,11 +227,11 @@ function BookReader() {
 
   // Check if we need to generate music for the next buffer
   const checkAndQueueNextBuffer = () => {
-    // Always maintain a 3-page look-ahead buffer from the current page
-    const pagesToLookAhead = 3;
+    // Always maintain a dynamic look-ahead buffer from the current page
+    const pagesToLookAhead = LOOK_AHEAD_BUFFER;
     const neededPages = [];
     
-    // Check which of the next 3 pages need music generation
+    // Check which of the next pages need music generation
     for (let i = 1; i <= pagesToLookAhead; i++) {
       const futurePage = page + i;
       
@@ -349,12 +354,20 @@ function BookReader() {
       
       console.log(`Generating music for page ${pageNum}, text length: ${formattedText.length}`);
       
+      // Add page identifier and book ID to ensure unique music for each page
+      const requestData = {
+        text: formattedText,
+        pageId: pageNum,
+        bookId: id,
+        timestamp: new Date().toISOString().slice(0, 10) // Include date to allow daily variation
+      };
+      
       const response = await fetch('/api/generate-music', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ text: formattedText })
+        body: JSON.stringify(requestData)
       });
 
       if (!response.ok) {
