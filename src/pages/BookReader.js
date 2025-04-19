@@ -62,14 +62,17 @@ function BookReader() {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
 
-  // Initial load - fetch first few pages and start music generation
+  // Add a specific debug flag to disable music to ensure reading works properly
+  const DEBUG_DISABLE_MUSIC = true; // Set to false if you want to enable music again
+
+  // Initialize page and fetch first content
   useEffect(() => {
     const initialize = async () => {
       setInitialLoading(true);
       setLoadingMessage('Loading book content...');
       
       try {
-        // First, fetch basic book information to get total pages
+        // Fetch the first page
         const response = await fetch(`/api/read/${id}?page=0`);
         if (!response.ok) {
           throw new Error(`Error fetching book: ${response.status}`);
@@ -80,49 +83,25 @@ function BookReader() {
           throw new Error('Invalid content received from the server');
         }
         
-        // Set the content directly instead of relying on state updates
-        const firstPageContent = data.content;
+        // Set the important book info
+        setContent(data.content);
         setTotalPages(data.totalPages);
         
-        // Update states synchronously for the first page
-        setContent(firstPageContent);
-        // Create a new object to avoid state update issues
-        const initialPageContents = { [0]: firstPageContent };
-        setPageContents(initialPageContents);
+        // Add to pageContents cache
+        setPageContents({
+          0: data.content
+        });
         
-        // Pre-fetch content for the first buffer of pages
-        setLoadingMessage('Pre-fetching initial pages...');
-        const totalPagesToBuffer = Math.min(MIN_PAGES_TO_LOAD, data.totalPages);
-        
-        // Fetch content for initial buffer (we already have page 0)
-        const contentPromises = [];
-        for (let i = 1; i < totalPagesToBuffer; i++) {
-          contentPromises.push(fetchAndStorePageContent(i, initialPageContents));
+        if (!DEBUG_DISABLE_MUSIC) {
+          // Skip music generation for testing
+          setLoadingMessage('Generating ambient music...');
+          await generateMusicForCurrentPage();
         }
-        
-        await Promise.all(contentPromises);
-        
-        // Now initialPageContents contains all fetched pages
-        setPageContents({ ...initialPageContents });
-        
-        // Now that we have content, generate music for the first buffer of pages
-        setLoadingMessage('Generating initial ambient music...');
-        await generateMusicForInitialBuffer(initialPageContents, totalPagesToBuffer);
-        
-        // Queue up the next buffer of pages
-        queueNextBuffer(totalPagesToBuffer);
         
       } catch (err) {
         console.error('Initialization error:', err);
         setError(`Failed to initialize: ${err.message}`);
       } finally {
-        // Final safety check - ensure we have content before removing loading screen
-        if (!content) {
-          const pageZeroContent = pageContents[0];
-          if (pageZeroContent && typeof pageZeroContent === 'string') {
-            setContent(pageZeroContent);
-          }
-        }
         setInitialLoading(false);
       }
     };
@@ -259,70 +238,58 @@ function BookReader() {
     }
   };
 
-  // Monitor page changes to maintain music playback and buffer management
+  // Monitor page changes to maintain book reading flow
   useEffect(() => {
     // Set the content from our cached page contents
     if (pageContents[page]) {
       setContent(pageContents[page]);
+      setLoading(false);
     } else {
       // If we don't have the content cached, fetch it
       setLoading(true);
-      fetchPage(page, true).then(pageContent => {
-        if (pageContent) {
-          setContent(pageContent);
-        }
-        setLoading(false);
-      }).catch(err => {
-        console.error(`Error loading page ${page}:`, err);
-        setError(`Failed to load page ${page + 1}`);
-        setLoading(false);
-      });
+      
+      fetch(`/api/read/${id}?page=${page}`)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`Error: ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          if (data.content) {
+            setContent(data.content);
+            
+            // Update page cache
+            setPageContents(prev => ({
+              ...prev,
+              [page]: data.content
+            }));
+            
+            // Update total pages if needed
+            if (data.totalPages && data.totalPages !== totalPages) {
+              setTotalPages(data.totalPages);
+            }
+          } else {
+            throw new Error('No content received from server');
+          }
+          setLoading(false);
+        })
+        .catch(err => {
+          console.error(`Error loading page ${page}:`, err);
+          setError(`Failed to load page ${page + 1}: ${err.message}`);
+          setLoading(false);
+        });
     }
     
-    // When page changes, check if we have cached music for this page
-    if (cachedMusic[page]) {
-      console.log(`Using cached music for page ${page}`);
-      
-      // Stop current audio if playing
-      if (audioRef.current && isPlaying) {
-        audioRef.current.pause();
-      }
-      
-      // Set the music URL for the current page
-      setMusicUrl(cachedMusic[page]);
-      
-      // Auto-play the cached music
-      setTimeout(() => {
-        if (audioRef.current) {
-          audioRef.current.volume = volume;
-          audioRef.current.play()
-            .then(() => setIsPlaying(true))
-            .catch(e => console.error('Auto-play failed:', e));
-        }
-      }, 500);
-    } else {
-      // If no cached music, generate it only if we have content
-      if (pageContents[page] && pageContents[page].trim()) {
-        // Pause any currently playing music before generating new music
-        if (audioRef.current && isPlaying) {
-          audioRef.current.pause();
-          setIsPlaying(false);
-        }
-        
-        // Clear the current music URL to avoid playing the wrong music
-        setMusicUrl(null);
-        
-        // Generate music for this page
-        generateMusicForCurrentPage();
-      }
+    // Only generate music if it's enabled
+    if (!DEBUG_DISABLE_MUSIC && !cachedMusic[page] && !generatingMusic) {
+      generateMusicForCurrentPage();
     }
     
-    // Always check and update the buffer when page changes
-    checkAndQueueNextBuffer();
+    // Log the current page for debugging
+    console.log(`Changed to page ${page + 1} of ${totalPages}`);
     
-    // Debug log the current music cache status
-    console.log(`Page changed to ${page}. Music cached for pages: ${Object.keys(cachedMusic).sort((a, b) => a - b).join(', ')}`);
-  }, [page]);
+  }, [page, id]);
 
   // Effect to handle the audio element's loop property
   useEffect(() => {

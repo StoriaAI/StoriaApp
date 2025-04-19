@@ -18,14 +18,26 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const bookId = req.query.id;
+    // Extract bookId from URL path (/api/read/{id})
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const pathParts = url.pathname.split('/');
+    let bookId = pathParts[pathParts.length - 1];
+    
+    // If no bookId in path, check query parameters
+    if (!bookId || bookId === 'read') {
+      bookId = req.query.id;
+    }
+    
     const pageRequested = parseInt(req.query.page) || 0;
-    const CHARS_PER_PAGE = 2500;
-    const PARAGRAPHS_PER_PAGE = 8;
+    const CHARS_PER_PAGE = 2000; // Shorter pages for better reading
+    const PARAGRAPHS_PER_PAGE = 5;  // Fewer paragraphs per page
 
     if (!bookId) {
       return res.status(400).json({ error: 'Book ID is required' });
     }
+
+    // Log the request
+    console.log(`Reading book ID: ${bookId}, page: ${pageRequested}`);
 
     // Get book details to determine the text URL
     const book = await getBookById(bookId);
@@ -33,139 +45,95 @@ module.exports = async (req, res) => {
       return res.status(404).json({ error: 'Book not found' });
     }
 
-    // Prioritized formats
-    const formatPriorities = [
-      'text/plain',
-      'text/plain; charset=utf-8',
-      'text/plain; charset=us-ascii',
-      'text/plain; charset=iso-8859-1',
-      'text/plain; charset=windows-1252',
-      'text/html',
-      'text/html; charset=utf-8'
-    ];
+    // Find the best text format available
     let textUrl = null;
-    let formatType = null;
+    const formatPriorities = [
+      'text/plain; charset=utf-8',
+      'text/plain',
+      'text/plain; charset=us-ascii',
+      'text/plain; charset=iso-8859-1'
+    ];
+    
     for (const fmt of formatPriorities) {
       if (book.formats[fmt]) {
         textUrl = book.formats[fmt];
-        formatType = fmt;
         break;
       }
     }
+    
     if (!textUrl) {
       return res.status(400).json({
         error: 'No suitable text format available for this book. Please try another book.'
       });
     }
 
-    // Attempt to get content length via HEAD request
-    let contentLength = 0;
+    // Fetch the book content
     try {
-      const headResp = await axios.head(textUrl, { headers: { 'Accept': 'text/plain' } });
-      contentLength = parseInt(headResp.headers['content-length'] || '0');
-    } catch (err) {
-      // Fallback: fetch a sample to estimate length
-      try {
-        const sampleResp = await axios.get(textUrl, {
-          headers: { 'Accept': 'text/plain', 'Range': 'bytes=0-10000' },
-          responseType: 'text'
-        });
-        contentLength = sampleResp.data.length;
-      } catch (err2) {
-        contentLength = 0;
+      console.log(`Fetching book content from: ${textUrl}`);
+      const response = await axios.get(textUrl, {
+        responseType: 'text',
+        timeout: 15000
+      });
+      
+      let rawText = response.data;
+      
+      // Remove Gutenberg header and footer
+      const headerRegex = /\*\*\*\s+START.+?GUTENBERG.+?\n/i;
+      const footerRegex = /\*\*\*\s+END.+?GUTENBERG.+/i;
+      
+      rawText = rawText.replace(headerRegex, '');
+      const footerMatch = rawText.match(footerRegex);
+      if (footerMatch) {
+        rawText = rawText.substring(0, footerMatch.index);
       }
-    }
-    // If unknown, default to 100 pages
-    const totalPagesEstimated = contentLength > 0 ? Math.ceil(contentLength / CHARS_PER_PAGE) : 100;
+      
+      // Split text into paragraphs
+      const paragraphs = rawText.split(/\n\s*\n/).map(p => p.trim()).filter(p => p);
 
-    // To reduce multiple range requests, fetch 10 pages at a time.
-    const startPage = Math.floor(pageRequested / 10) * 10;
-    const endPage = Math.min(startPage + 9, totalPagesEstimated - 1);
-    const startByte = startPage * CHARS_PER_PAGE;
-    const bytesToFetch = Math.floor((endPage - startPage + 1) * CHARS_PER_PAGE * 1.5);
+      // Group paragraphs into pages
+      const pages = [];
+      for (let i = 0; i < paragraphs.length; i += PARAGRAPHS_PER_PAGE) {
+        pages.push(paragraphs.slice(i, i + PARAGRAPHS_PER_PAGE).join('\n\n'));
+      }
 
-    console.log(`Fetching bytes ${startByte} to ${startByte + bytesToFetch} from ${textUrl}`);
-    const rangeResp = await axios.get(textUrl, {
-      headers: {
-        'Accept': 'text/plain',
-        'Range': `bytes=${startByte}-${startByte + bytesToFetch}`
-      },
-      responseType: 'text'
-    });
-    let rawText = rangeResp.data;
+      // Ensure we have at least one page
+      if (pages.length === 0) {
+        pages.push("The book content could not be properly formatted.");
+      }
 
-    // Remove Gutenberg header markers if present
-    const headerMarkers = [
-      '*** START OF THE PROJECT GUTENBERG EBOOK',
-      '*** START OF THIS PROJECT GUTENBERG EBOOK',
-      '***START OF THE PROJECT GUTENBERG EBOOK',
-      '*** START OF THE PROJECT GUTENBERG',
-      '*** START OF THIS PROJECT GUTENBERG',
-      '*** START OF THE PROJECT',
-      '*END*THE SMALL PRINT'
-    ];
-    for (const marker of headerMarkers) {
-      const idx = rawText.indexOf(marker);
-      if (idx !== -1) {
-        const nextLine = rawText.indexOf('\n', idx);
-        if (nextLine !== -1) {
-          rawText = rawText.substring(nextLine + 1);
-          break;
+      // Get the requested page
+      const pageIndex = Math.min(pageRequested, pages.length - 1);
+      const pageContent = pages[pageIndex] || "Page content not available.";
+      
+      // Return book metadata along with the page content
+      res.json({
+        page: pageIndex,
+        totalPages: pages.length,
+        hasNext: pageIndex < pages.length - 1,
+        hasPrev: pageIndex > 0,
+        content: pageContent,
+        bookInfo: {
+          id: book.id,
+          title: book.title,
+          authors: book.authors,
+          languages: book.languages,
+          download_count: book.download_count
         }
-      }
+      });
+      
+    } catch (error) {
+      console.error(`Error fetching book content: ${error.message}`);
+      return res.status(500).json({
+        error: 'Failed to fetch book content',
+        details: error.message
+      });
     }
-    // Remove Gutenberg footer markers if present
-    const footerMarkers = [
-      '*** END OF THE PROJECT GUTENBERG EBOOK',
-      '*** END OF THIS PROJECT GUTENBERG EBOOK',
-      '***END OF THE PROJECT GUTENBERG EBOOK',
-      '*** END OF THE PROJECT GUTENBERG',
-      '*** END OF THIS PROJECT GUTENBERG',
-      'End of the Project Gutenberg',
-      'End of Project Gutenberg'
-    ];
-    for (const marker of footerMarkers) {
-      const idx = rawText.indexOf(marker);
-      if (idx !== -1) {
-        rawText = rawText.substring(0, idx);
-        break;
-      }
-    }
-
-    // Split text into paragraphs (split on one or more blank lines)
-    const paragraphs = rawText.split(/\n\s*\n/).map(p => p.trim()).filter(p => p.length > 0);
-
-    // Group paragraphs into pages (each page will have a fixed number of paragraphs)
-    const pages = [];
-    let currentPageText = "";
-    let paraCount = 0;
-    for (const para of paragraphs) {
-      if (paraCount >= PARAGRAPHS_PER_PAGE && currentPageText.length > 0) {
-        pages.push(currentPageText);
-        currentPageText = para;
-        paraCount = 1;
-      } else {
-        currentPageText += (currentPageText ? "\n\n" : "") + para;
-        paraCount++;
-      }
-    }
-    if (currentPageText.trim()) {
-      pages.push(currentPageText.trim());
-    }
-
-    // Determine the requested page within this fetched range.
-    const relativePageIndex = pageRequested - startPage;
-    const pageContent = pages[relativePageIndex] || "Page content not available.";
-
-    res.json({
-      page: pageRequested,
-      totalPages: totalPagesEstimated,
-      hasNext: pageRequested < totalPagesEstimated - 1,
-      hasPrev: pageRequested > 0,
-      content: pageContent
-    });
+    
   } catch (error) {
     console.error('Error reading book:', error.message);
-    res.status(500).json({ error: 'Failed to load book content', details: error.message });
+    res.status(500).json({ 
+      error: 'Failed to load book content', 
+      details: error.message 
+    });
   }
 }; 

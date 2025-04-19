@@ -23,7 +23,6 @@ import {
   Tooltip
 } from '@mui/material';
 import { 
-  LibraryBooks, 
   Info, 
   ContactMail, 
   Menu as MenuIcon,
@@ -127,9 +126,9 @@ function Navbar() {
 
   const navItems = [
     { name: 'Home', path: '/' },
-    { name: 'Explorer', path: '/books' },
-    { name: 'Library', path: '/library' },
-    { name: 'Pricing', path: '/pricing' }
+    { name: 'About', path: '/about' },
+    { name: 'Pricing', path: '/pricing' },
+    { name: 'Contact', path: '/contact' }
   ];
 
   const DrawerList = () => (
@@ -158,29 +157,25 @@ function Navbar() {
           <CloseIcon />
         </IconButton>
       </Box>
-      <List>
-        {navItems.map((item) => (
-          <ListItem 
-            button 
-            component={RouterLink} 
-            to={item.path} 
-            key={item.name}
-            sx={{ 
-              py: 1.5,
-              '&:hover': {
-                backgroundColor: 'rgba(255, 255, 255, 0.05)',
-              } 
-            }}
-          >
-            <ListItemText 
-              primary={item.name} 
-              primaryTypographyProps={{ 
-                fontWeight: 500,
-                color: theme.palette.text.primary
-              }}
-            />
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <List sx={{ py: 4 }}>
+          <ListItem button component={RouterLink} to="/" onClick={toggleDrawer(false)}>
+            <ListItemIcon><HomeIcon fontSize="small" /></ListItemIcon>
+            <ListItemText primary="Home" />
           </ListItem>
-        ))}
+          <ListItem button component={RouterLink} to="/pricing" onClick={toggleDrawer(false)}>
+            <ListItemIcon><Info fontSize="small" /></ListItemIcon>
+            <ListItemText primary="Pricing" />
+          </ListItem>
+          <ListItem button component={RouterLink} to="/about" onClick={toggleDrawer(false)}>
+            <ListItemIcon><Info fontSize="small" /></ListItemIcon>
+            <ListItemText primary="About" />
+          </ListItem>
+          <ListItem button component={RouterLink} to="/contact" onClick={toggleDrawer(false)}>
+            <ListItemIcon><ContactMail fontSize="small" /></ListItemIcon>
+            <ListItemText primary="Contact" />
+          </ListItem>
+        </List>
         
         <Divider sx={{ my: 2 }} />
         
@@ -278,7 +273,7 @@ function Navbar() {
             </ListItem>
           </>
         )}
-      </List>
+      </Box>
     </Box>
   );
 

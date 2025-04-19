@@ -163,17 +163,37 @@ const ProfilePage = () => {
       return;
     }
     
-    // Create preview URL
-    const previewUrl = URL.createObjectURL(file);
-    
-    setFormState(prev => ({ 
-      ...prev, 
-      profilePhoto: file,
-      profilePhotoUrl: previewUrl
-    }));
-    
-    // Clear any error
-    setFormErrors(prev => ({ ...prev, profilePhoto: '' }));
+    try {
+      // Show loading state
+      setLoading(true);
+      
+      // Create preview URL
+      const previewUrl = URL.createObjectURL(file);
+      
+      // Update state immediately to show the new image
+      setFormState(prev => ({ 
+        ...prev, 
+        profilePhoto: file,
+        profilePhotoUrl: previewUrl
+      }));
+      
+      // Clear any error
+      setFormErrors(prev => ({ ...prev, profilePhoto: '' }));
+      
+      // Wait a moment to allow the UI to update, giving immediate visual feedback
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Upload file to storage if needed
+      // This is just a placeholder for where you might handle the actual file upload
+      // const { fileUrl } = await uploadProfilePhoto(file, user.id);
+      // setFormState(prev => ({ ...prev, profilePhotoUrl: fileUrl }));
+      
+    } catch (err) {
+      console.error('Error handling file:', err);
+      setError('There was a problem processing your image. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Handle genre selection with checkboxes
@@ -258,110 +278,77 @@ const ProfilePage = () => {
 
   // Save profile to Supabase
   const saveProfile = async () => {
-    if (!validateForm()) return;
+    // First, validate the form
+    const isValid = validateForm();
+    if (!isValid) return;
+    
+    setLoading(true);
+    setError('');
     
     try {
-      setLoading(true);
-      setError('');
-      setSuccessMessage('');
-
-      // First upload the image if we have a new one
-      let profileImageUrl = formState.profilePhotoUrl;
+      // Get form data
+      const { firstName, lastName, country, profilePhoto, selectedGenres, selectedAiFeatures } = formState;
       
-      if (formState.profilePhoto && !profileImageUrl.startsWith('https://')) {
-        const fileExt = formState.profilePhoto.name.split('.').pop();
+      // Prepare profile data object
+      const profileData = {
+        id: user.id,
+        first_name: firstName,
+        last_name: lastName,
+        country,
+        preferred_genres: selectedGenres,
+        ai_preferences: selectedAiFeatures
+      };
+      
+      // If there's a new profile photo, upload it
+      if (profilePhoto && profilePhoto instanceof File) {
+        // 1. Create a unique filename
+        const fileExt = profilePhoto.name.split('.').pop();
         const fileName = `${user.id}-${Date.now()}.${fileExt}`;
         
-        const { error: uploadError } = await supabase.storage
-          .from('profile_photos')
-          .upload(fileName, formState.profilePhoto);
-          
+        // 2. Upload to Supabase Storage
+        const { data: uploadData, error: uploadError } = await supabase
+          .storage
+          .from('profile-photos')
+          .upload(fileName, profilePhoto, {
+            cacheControl: '3600',
+            upsert: true
+          });
+        
         if (uploadError) throw uploadError;
         
-        // Get the URL
-        const { data: { publicUrl } } = supabase.storage
-          .from('profile_photos')
+        // 3. Get the public URL
+        const { data: urlData } = supabase
+          .storage
+          .from('profile-photos')
           .getPublicUrl(fileName);
-          
-        profileImageUrl = publicUrl;
+        
+        // 4. Set the profile photo URL
+        profileData.profile_photo_url = urlData.publicUrl;
+      } else if (formState.profilePhotoUrl) {
+        // Use existing URL if available
+        profileData.profile_photo_url = formState.profilePhotoUrl;
       }
       
-      // Check for duplicate profiles and clean them up
-      try {
-        console.log('Checking for duplicate profiles for user:', user.id);
-        const { data: existingProfiles, error: queryError } = await supabase
-          .from('user_profiles')
-          .select('id, created_at')
-          .eq('user_id', user.id);
-          
-        if (!queryError && existingProfiles && existingProfiles.length > 1) {
-          console.log(`Found ${existingProfiles.length} duplicate profiles for user ${user.id}, cleaning up...`);
-          
-          // Keep only the most recently created profile
-          const sortedProfiles = [...existingProfiles].sort((a, b) => {
-            // Sort by created_at or id if no created_at
-            const dateA = a.created_at ? new Date(a.created_at) : 0;
-            const dateB = b.created_at ? new Date(b.created_at) : 0;
-            return dateB - dateA; // descending order (most recent first)
-          });
-          
-          // Remove all but the most recent profile
-          const profilesToDelete = sortedProfiles.slice(1).map(p => p.id);
-          
-          if (profilesToDelete.length > 0) {
-            const { error: deleteError } = await supabase
-              .from('user_profiles')
-              .delete()
-              .in('id', profilesToDelete);
-              
-            if (deleteError) {
-              console.error('Error deleting duplicate profiles:', deleteError.message);
-            } else {
-              console.log(`Successfully deleted ${profilesToDelete.length} duplicate profiles`);
-            }
-          }
-        }
-      } catch (cleanupError) {
-        console.error('Error during profile cleanup:', cleanupError);
-        // Continue with the profile update even if cleanup fails
-      }
+      // Update profile in database
+      const { data, error } = await updateUserProfile(profileData);
       
-      // Check if the user already has a profile
-      const { data: existingProfile } = await getUserProfile(user.id);
-      const isNewUser = !existingProfile;
+      if (error) throw error;
       
-      // Save profile data
-      const { error: updateError } = await updateUserProfile(user.id, {
-        first_name: formState.firstName,
-        last_name: formState.lastName,
-        country: formState.country,
-        profile_photo_url: profileImageUrl,
-        preferred_genres: formState.selectedGenres,
-        ai_preferences: formState.selectedAiFeatures,
-        has_completed_onboarding: true,
-        created_at: isNewUser ? new Date().toISOString() : existingProfile.created_at,
-        updated_at: new Date().toISOString()
-      });
-      
-      if (updateError) throw updateError;
-      
-      // Update the needsProfile state to false since profile is now completed
-      if (needsProfile) {
-        setNeedsProfile(false);
-      }
-      
+      // Profile successfully updated
       setSuccessMessage('Profile updated successfully!');
       
-      // If user was redirected here because they needed to complete their profile,
-      // redirect them back to homepage after a short delay
+      // Mark that user has completed profile setup if needed
       if (needsProfile) {
+        setNeedsProfile(false);
+        
+        // Redirect to home page after short delay for success message
         setTimeout(() => {
           navigate('/');
-        }, 1500);
+        }, 2000);
       }
     } catch (err) {
       console.error('Error saving profile:', err);
-      setError('Error saving your profile. Please try again.');
+      setError('Failed to save profile. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -381,286 +368,274 @@ const ProfilePage = () => {
   }
 
   return (
-    <Container maxWidth="md" sx={{ py: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        {needsProfile ? 'Complete Your Profile' : 'Your Profile'}
+    <Container maxWidth="md" sx={{ py: 6 }}>
+      <Typography 
+        variant="h1" 
+        component="h1" 
+        sx={{ 
+          fontSize: { xs: '2rem', md: '2.5rem' },
+          mb: 4,
+          textAlign: 'center',
+          fontWeight: 700,
+          color: theme.palette.primary.main
+        }}
+      >
+        {needsProfile ? 'Complete Your Profile' : 'Edit Your Profile'}
       </Typography>
       
-      {needsProfile && (
-        <Alert severity="info" sx={{ mb: 3 }}>
-          Please complete your profile information to continue using Storia.
-        </Alert>
-      )}
-      
-      <Divider sx={{ mb: 4 }} />
-      
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-      )}
-      
-      <Snackbar 
-        open={!!successMessage} 
-        autoHideDuration={5000} 
-        onClose={handleCloseSuccessMessage}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      {initialLoading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+          <CircularProgress />
+        </Box>
+      ) : (
+      <Paper 
+        elevation={0}
+        sx={{ 
+          p: { xs: 2, sm: 4 }, 
+          mb: 4, 
+          borderRadius: 3,
+          bgcolor: 'rgba(25,25,25,0.6)',
+          backdropFilter: 'blur(10px)',
+          border: '1px solid rgba(255,255,255,0.1)'
+        }}
       >
-        <Alert onClose={handleCloseSuccessMessage} severity="success">
+        {/* Display any errors */}
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
+            {error}
+          </Alert>
+        )}
+        
+        {/* Display success message */}
+        {successMessage && (
+          <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSuccessMessage('')}>
+            {successMessage}
+          </Alert>
+        )}
+        
+        <Grid container spacing={3}>
+          {/* Profile Photo */}
+          <Grid item xs={12} sm={4}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <Avatar
+                src={formState.profilePhotoUrl || ''}
+                alt={`${formState.firstName} ${formState.lastName}`}
+                sx={{ 
+                  width: 150, 
+                  height: 150,
+                  mb: 2,
+                  border: '4px solid rgba(255,255,255,0.1)',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                }}
+              />
+              <input
+                accept="image/*"
+                style={{ display: 'none' }}
+                id="profile-photo-upload"
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+              />
+              <label htmlFor="profile-photo-upload">
+                <Button
+                  variant="outlined"
+                  component="span"
+                  startIcon={<PhotoCamera />}
+                  sx={{ mt: 1 }}
+                  disabled={loading}
+                >
+                  {formState.profilePhotoUrl ? 'Change Photo' : 'Upload Photo'}
+                </Button>
+              </label>
+              {formErrors.profilePhoto && (
+                <FormHelperText error>{formErrors.profilePhoto}</FormHelperText>
+              )}
+            </Box>
+          </Grid>
+          
+          {/* Basic Info */}
+          <Grid item xs={12} sm={8}>
+            <Box>
+              <Typography variant="h6" gutterBottom sx={{ color: theme.palette.primary.main, fontWeight: 600 }}>
+                Basic Information
+              </Typography>
+              
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="First Name"
+                    name="firstName"
+                    value={formState.firstName}
+                    onChange={handleChange}
+                    fullWidth
+                    variant="outlined"
+                    required
+                    error={!!formErrors.firstName}
+                    helperText={formErrors.firstName}
+                    disabled={loading}
+                    sx={{ mb: 2 }}
+                  />
+                </Grid>
+                
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="Last Name"
+                    name="lastName"
+                    value={formState.lastName}
+                    onChange={handleChange}
+                    fullWidth
+                    variant="outlined"
+                    required
+                    error={!!formErrors.lastName}
+                    helperText={formErrors.lastName}
+                    disabled={loading}
+                    sx={{ mb: 2 }}
+                  />
+                </Grid>
+              </Grid>
+              
+              <TextField
+                label="Country"
+                name="country"
+                value={formState.country}
+                onChange={handleChange}
+                fullWidth
+                variant="outlined"
+                required
+                error={!!formErrors.country}
+                helperText={formErrors.country}
+                disabled={loading}
+                sx={{ mb: 2 }}
+              />
+            </Box>
+          </Grid>
+          
+          {/* Genre Selection Section */}
+          <Grid item xs={12}>
+            <Divider sx={{ my: 3 }} />
+            
+            <Typography variant="h6" gutterBottom sx={{ color: theme.palette.primary.main, fontWeight: 600 }}>
+              Book Preferences
+            </Typography>
+            
+            <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+              Select up to 7 genres that you enjoy reading. This helps us personalize your experience.
+            </Typography>
+            
+            {formErrors.selectedGenres && (
+              <FormHelperText error sx={{ mb: 2 }}>{formErrors.selectedGenres}</FormHelperText>
+            )}
+            
+            <Box sx={{ mb: 3 }}>
+              <Box component="div" sx={{ 
+                display: 'flex', 
+                flexWrap: 'wrap', 
+                gap: 1,
+                maxHeight: '200px',
+                overflowY: 'auto',
+                p: 1,
+                '&::-webkit-scrollbar': {
+                  width: '8px',
+                },
+                '&::-webkit-scrollbar-thumb': {
+                  backgroundColor: 'rgba(255,255,255,0.1)',
+                  borderRadius: '4px',
+                },
+              }}>
+                {BOOK_GENRES.map((genre) => (
+                  <Chip
+                    key={genre}
+                    label={genre}
+                    clickable
+                    onClick={() => handleGenreToggle(genre)}
+                    color={formState.selectedGenres.includes(genre) ? 'primary' : 'default'}
+                    variant={formState.selectedGenres.includes(genre) ? 'filled' : 'outlined'}
+                    sx={{ 
+                      m: 0.5,
+                      transition: 'all 0.2s ease',
+                      borderWidth: formState.selectedGenres.includes(genre) ? 0 : 1,
+                      '&:hover': {
+                        backgroundColor: formState.selectedGenres.includes(genre) 
+                          ? theme.palette.primary.main 
+                          : 'rgba(244, 228, 188, 0.1)',
+                      }
+                    }}
+                  />
+                ))}
+              </Box>
+            </Box>
+          </Grid>
+          
+          {/* AI Features Section */}
+          <Grid item xs={12}>
+            <Divider sx={{ my: 3 }} />
+            
+            <Typography variant="h6" gutterBottom sx={{ color: theme.palette.primary.main, fontWeight: 600 }}>
+              AI Features
+            </Typography>
+            
+            <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+              Select which AI features you'd like to enable (up to 5). You can change these settings later.
+            </Typography>
+            
+            <Box sx={{ mb: 3 }}>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {AI_FEATURES.map((feature) => (
+                  <Chip
+                    key={feature}
+                    label={feature}
+                    clickable
+                    onClick={() => handleAiFeatureToggle(feature)}
+                    color={formState.selectedAiFeatures.includes(feature) ? 'primary' : 'default'}
+                    variant={formState.selectedAiFeatures.includes(feature) ? 'filled' : 'outlined'}
+                    sx={{ 
+                      m: 0.5,
+                      transition: 'all 0.2s ease',
+                      borderWidth: formState.selectedAiFeatures.includes(feature) ? 0 : 1,
+                      '&:hover': {
+                        backgroundColor: formState.selectedAiFeatures.includes(feature) 
+                          ? theme.palette.primary.main 
+                          : 'rgba(244, 228, 188, 0.1)',
+                      }
+                    }}
+                  />
+                ))}
+              </Box>
+            </Box>
+          </Grid>
+        </Grid>
+        
+        <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end' }}>
+          <Button
+            variant="contained"
+            color="primary"
+            size="large"
+            onClick={saveProfile}
+            disabled={loading}
+            startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <Save />}
+            sx={{ 
+              px: 4,
+              py: 1.2,
+              borderRadius: 2,
+              fontWeight: 600 
+            }}
+          >
+            {loading ? 'Saving...' : 'Save Profile'}
+          </Button>
+        </Box>
+      </Paper>
+      )}
+      
+      <Snackbar
+        open={!!successMessage}
+        autoHideDuration={6000}
+        onClose={() => setSuccessMessage('')}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="success" variant="filled">
           {successMessage}
         </Alert>
       </Snackbar>
-      
-      <Paper 
-        elevation={3} 
-        sx={{ 
-          p: isMobile ? 2 : 4, 
-          borderRadius: 2,
-          mb: 4
-        }}
-      >
-        <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
-          Personal Information
-        </Typography>
-        
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={4} 
-            sx={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'center',
-              justifyContent: 'flex-start'
-            }}
-          >
-            <Box
-              sx={{
-                width: 150,
-                height: 150,
-                borderRadius: '50%',
-                border: '1px dashed',
-                borderColor: formErrors.profilePhoto ? 'error.main' : 'divider',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                overflow: 'hidden',
-                bgcolor: 'background.default',
-                position: 'relative',
-                mb: 2
-              }}
-            >
-              {formState.profilePhotoUrl ? (
-                <Avatar
-                  src={formState.profilePhotoUrl}
-                  alt="Profile Preview"
-                  sx={{
-                    width: '100%',
-                    height: '100%'
-                  }}
-                />
-              ) : (
-                <PhotoCamera fontSize="large" color="action" />
-              )}
-            </Box>
-            
-            <Button
-              variant="outlined"
-              component="label"
-              startIcon={<PhotoCamera />}
-              sx={{ mb: 1 }}
-            >
-              Upload Photo
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                hidden
-                onChange={handleFileChange}
-              />
-            </Button>
-            
-            {formErrors.profilePhoto && (
-              <Typography color="error" variant="body2">
-                {formErrors.profilePhoto}
-              </Typography>
-            )}
-          </Grid>
-          
-          <Grid item xs={12} md={8}>
-            <TextField
-              fullWidth
-              label="First Name"
-              name="firstName"
-              value={formState.firstName}
-              onChange={handleChange}
-              error={!!formErrors.firstName}
-              helperText={formErrors.firstName}
-              margin="normal"
-              required
-            />
-            
-            <TextField
-              fullWidth
-              label="Last Name"
-              name="lastName"
-              value={formState.lastName}
-              onChange={handleChange}
-              error={!!formErrors.lastName}
-              helperText={formErrors.lastName}
-              margin="normal"
-              required
-            />
-            
-            <TextField
-              fullWidth
-              label="Country"
-              name="country"
-              value={formState.country}
-              onChange={handleChange}
-              error={!!formErrors.country}
-              helperText={formErrors.country}
-              margin="normal"
-              required
-            />
-          </Grid>
-        </Grid>
-      </Paper>
-      
-      <Paper 
-        elevation={3} 
-        sx={{ 
-          p: isMobile ? 2 : 4, 
-          borderRadius: 2,
-          mb: 4
-        }}
-      >
-        <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
-          Book Preferences
-        </Typography>
-        
-        <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
-          Select at least 5 and up to 7 genres that interest you.
-        </Typography>
-        
-        {formErrors.selectedGenres && (
-          <Typography color="error" variant="body2" sx={{ mb: 2 }}>
-            {formErrors.selectedGenres}
-          </Typography>
-        )}
-        
-        <Box sx={{ maxHeight: '400px', overflow: 'auto', pb: 2 }}>
-          <Grid container spacing={1}>
-            {BOOK_GENRES.map((genre) => (
-              <Grid item xs={12} sm={6} md={4} key={genre}>
-                <Paper
-                  elevation={1}
-                  sx={{
-                    p: 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    cursor: 'pointer',
-                    bgcolor: formState.selectedGenres.includes(genre) 
-                      ? 'rgba(156, 39, 176, 0.1)' 
-                      : 'background.paper',
-                    border: 1,
-                    borderColor: formState.selectedGenres.includes(genre)
-                      ? 'primary.main'
-                      : 'divider',
-                    borderRadius: 1,
-                    '&:hover': {
-                      bgcolor: 'rgba(156, 39, 176, 0.05)',
-                    }
-                  }}
-                  onClick={() => handleGenreToggle(genre)}
-                >
-                  <Checkbox 
-                    checked={formState.selectedGenres.includes(genre)}
-                    color="primary"
-                    size="small"
-                    sx={{ p: 0.5, mr: 1 }}
-                  />
-                  <Typography variant="body2">{genre}</Typography>
-                </Paper>
-              </Grid>
-            ))}
-          </Grid>
-        </Box>
-        
-        <FormHelperText>
-          {formState.selectedGenres.length}/7 genres selected
-          {formState.selectedGenres.length < 5 && 
-            ` (minimum 5 required)`}
-        </FormHelperText>
-      </Paper>
-      
-      <Paper 
-        elevation={3} 
-        sx={{ 
-          p: isMobile ? 2 : 4, 
-          borderRadius: 2,
-          mb: 4
-        }}
-      >
-        <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
-          AI Content Preferences
-        </Typography>
-        
-        <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
-          Select which AI features you'd like to enable (up to 5).
-        </Typography>
-        
-        <Grid container spacing={2}>
-          {AI_FEATURES.map((feature) => (
-            <Grid item xs={12} sm={6} key={feature}>
-              <Paper
-                elevation={1}
-                sx={{
-                  p: 1.5,
-                  display: 'flex',
-                  alignItems: 'center',
-                  cursor: 'pointer',
-                  bgcolor: formState.selectedAiFeatures.includes(feature) 
-                    ? 'rgba(156, 39, 176, 0.1)' 
-                    : 'background.paper',
-                  border: 1,
-                  borderColor: formState.selectedAiFeatures.includes(feature)
-                    ? 'primary.main'
-                    : 'divider',
-                  borderRadius: 1,
-                  '&:hover': {
-                    bgcolor: 'rgba(156, 39, 176, 0.05)',
-                  }
-                }}
-                onClick={() => handleAiFeatureToggle(feature)}
-              >
-                <Checkbox 
-                  checked={formState.selectedAiFeatures.includes(feature)}
-                  color="primary"
-                  sx={{ mr: 1 }}
-                />
-                <Typography>{feature}</Typography>
-              </Paper>
-            </Grid>
-          ))}
-        </Grid>
-        
-        <FormHelperText sx={{ mt: 2 }}>
-          {formState.selectedAiFeatures.length}/5 features selected (optional)
-        </FormHelperText>
-      </Paper>
-      
-      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-        <Button
-          variant="contained"
-          color="primary"
-          size="large"
-          startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <Save />}
-          onClick={saveProfile}
-          disabled={loading}
-          sx={{ px: 4, py: 1 }}
-        >
-          {loading ? 'Saving...' : (needsProfile ? 'Complete Profile' : 'Save Profile')}
-        </Button>
-      </Box>
     </Container>
   );
 };
