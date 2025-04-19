@@ -341,6 +341,50 @@ const OnboardingWizard = () => {
         profileImageUrl = publicUrl;
       }
       
+      // Check for duplicate profiles and clean them up
+      try {
+        console.log('Checking for duplicate profiles for user:', user.id);
+        const { data: existingProfiles, error: queryError } = await supabase
+          .from('user_profiles')
+          .select('id')
+          .eq('user_id', user.id);
+          
+        if (!queryError && existingProfiles && existingProfiles.length > 1) {
+          console.log(`Found ${existingProfiles.length} duplicate profiles for user ${user.id}, cleaning up...`);
+          
+          // Keep only the most recently created profile
+          const sortedProfiles = [...existingProfiles].sort((a, b) => {
+            // Sort by created_at or id if no created_at
+            const dateA = a.created_at ? new Date(a.created_at) : 0;
+            const dateB = b.created_at ? new Date(b.created_at) : 0;
+            return dateB - dateA; // descending order (most recent first)
+          });
+          
+          // Remove all but the most recent profile
+          const profilesToDelete = sortedProfiles.slice(1).map(p => p.id);
+          
+          if (profilesToDelete.length > 0) {
+            const { error: deleteError } = await supabase
+              .from('user_profiles')
+              .delete()
+              .in('id', profilesToDelete);
+              
+            if (deleteError) {
+              console.error('Error deleting duplicate profiles:', deleteError.message);
+            } else {
+              console.log(`Successfully deleted ${profilesToDelete.length} duplicate profiles`);
+            }
+          }
+        }
+      } catch (cleanupError) {
+        console.error('Error during profile cleanup:', cleanupError);
+        // Continue with the profile update even if cleanup fails
+      }
+      
+      // Check if the user already has a profile
+      const { data: existingProfile } = await getUserProfile(user.id);
+      const isNewUser = !existingProfile;
+      
       // Save profile data
       const { error: updateError } = await updateUserProfile(user.id, {
         first_name: formState.firstName,
@@ -350,7 +394,7 @@ const OnboardingWizard = () => {
         preferred_genres: formState.selectedGenres,
         ai_preferences: formState.selectedAiFeatures,
         has_completed_onboarding: true,
-        created_at: new Date().toISOString(),
+        created_at: isNewUser ? new Date().toISOString() : existingProfile.created_at,
         updated_at: new Date().toISOString()
       });
       

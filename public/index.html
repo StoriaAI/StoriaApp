@@ -12,6 +12,30 @@
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     <title>Storia - Immersive Book Reading Experience</title>
+    
+    <!-- Early redirect script for production environments -->
+    <script>
+      (function() {
+        // Only run in production and when on localhost
+        if (window.location.hostname === 'localhost' || 
+            window.location.hostname === '127.0.0.1') {
+          
+          // Check if we're in production by looking for Vercel-specific headers
+          // or environment variables injected during build
+          const isProduction = 
+            document.querySelector('meta[name="vercel-deployment-url"]') ||
+            window.PRODUCTION_ENV === true;
+          
+          if (isProduction) {
+            const PRODUCTION_URL = 'https://joinstoria.vercel.app';
+            console.log('🚨 Early redirect: detected localhost in production environment');
+            console.log('Redirecting to:', PRODUCTION_URL);
+            window.location.replace(PRODUCTION_URL + window.location.pathname + window.location.search + window.location.hash);
+          }
+        }
+      })();
+    </script>
+    
     <style>
       /* Global CSS for better responsive behavior */
       html, body {

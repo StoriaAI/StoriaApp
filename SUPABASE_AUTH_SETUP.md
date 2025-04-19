@@ -12,14 +12,14 @@ This document outlines the exact configuration needed in your Supabase project t
 ### Site URL
 This is critical - must be set to your production URL:
 ```
-https://storia-app.vercel.app
+https://joinstoria.vercel.app
 ```
 (replace with your actual production URL)
 
 ### Redirect URLs
 Add these URLs (adjust based on your actual domain):
 ```
-https://storia-app.vercel.app/**
+https://joinstoria.vercel.app/**
 http://localhost:3000/** (only for local development)
 ```
 
@@ -36,14 +36,14 @@ http://localhost:3000/** (only for local development)
 2. Edit your OAuth 2.0 Client ID
 3. Add these **Authorized JavaScript Origins**:
    ```
-   https://storia-app.vercel.app
+   https://joinstoria.vercel.app
    http://localhost:3000
    ```
 4. Add these **Authorized Redirect URIs**:
    ```
    https://slvxbqfzfsdufulepitc.supabase.co/auth/v1/callback
-   https://storia-app.vercel.app
-   https://storia-app.vercel.app/
+   https://joinstoria.vercel.app
+   https://joinstoria.vercel.app/
    http://localhost:3000
    http://localhost:3000/
    ```

@@ -2,31 +2,41 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Container,
-  Grid,
-  Card,
-  CardContent,
-  CardMedia,
   Typography,
   TextField,
-  Button,
+  InputAdornment,
   Box,
+  Grid,
+  CardMedia,
+  Card,
+  CardContent,
+  Button,
   CircularProgress,
   Alert,
   styled,
   useTheme,
   useMediaQuery,
 } from '@mui/material';
-import { Search } from '@mui/icons-material';
+import SearchIcon from '@mui/icons-material/Search';
 import FallbackLibrary from '../components/FallbackLibrary';
 import '../styles/Home.css';
 
-const SearchContainer = styled(Box)(({ theme }) => ({
-  marginTop: theme.spacing(8),
-  marginBottom: theme.spacing(4),
-  textAlign: 'center',
-  [theme.breakpoints.down('sm')]: {
-    marginTop: theme.spacing(4),
-    marginBottom: theme.spacing(3),
+// Styled Components
+const SectionHeading = styled(Typography)(({ theme }) => ({
+  fontSize: '1.2rem',
+  fontWeight: 600,
+  color: theme.palette.text.primary,
+  marginBottom: theme.spacing(2),
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  '& .see-all': {
+    fontSize: '0.875rem',
+    color: theme.palette.primary.main,
+    cursor: 'pointer',
+    '&:hover': {
+      textDecoration: 'underline',
+    },
   },
 }));
 
@@ -34,36 +44,81 @@ const BookCard = styled(Card)(({ theme }) => ({
   height: '100%',
   display: 'flex',
   flexDirection: 'column',
-  transition: 'transform 0.2s',
+  background: 'transparent',
+  boxShadow: 'none',
+  borderRadius: 0,
+  position: 'relative',
+  overflow: 'visible',
+}));
+
+const BookCover = styled(CardMedia)(({ theme }) => ({
+  height: 0,
+  paddingTop: '150%', // 2:3 aspect ratio for book covers
+  borderRadius: theme.spacing(1),
+  boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
+  transition: 'transform 0.3s ease',
   '&:hover': {
-    transform: 'scale(1.02)',
+    transform: 'translateY(-8px)',
   },
 }));
 
-const ResponsiveHeading = styled(Typography)(({ theme }) => ({
-  [theme.breakpoints.down('sm')]: {
-    fontSize: '2rem',
+const BookRating = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  alignItems: 'center',
+  marginTop: theme.spacing(0.5),
+  '& .star': {
+    color: '#f5bb00',
+    fontSize: '0.85rem',
   },
-  [theme.breakpoints.between('sm', 'md')]: {
-    fontSize: '2.5rem',
-  },
-  [theme.breakpoints.up('md')]: {
-    fontSize: '3rem',
+  '& .count': {
+    fontSize: '0.75rem',
+    color: theme.palette.text.secondary,
+    marginLeft: theme.spacing(0.5),
   },
 }));
 
-const ResponsiveSubheading = styled(Typography)(({ theme }) => ({
-  [theme.breakpoints.down('sm')]: {
-    fontSize: '1rem',
-    marginLeft: theme.spacing(1),
-    marginRight: theme.spacing(1),
+const SearchInput = styled(TextField)(({ theme }) => ({
+  '& .MuiOutlinedInput-root': {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: theme.spacing(3),
+    '&:hover .MuiOutlinedInput-notchedOutline': {
+      borderColor: theme.palette.primary.main,
+    },
+    '& .MuiOutlinedInput-notchedOutline': {
+      borderColor: 'rgba(255, 255, 255, 0.1)',
+    },
+  },
+  '& .MuiInputBase-input': {
+    padding: theme.spacing(1.5, 2),
   },
 }));
+
+const CategorySection = styled(Box)(({ theme }) => ({
+  marginBottom: theme.spacing(6),
+}));
+
+// Book categories from reference image
+const bookCategories = [
+  'Latest Summaries',
+  'Trending Books',
+  'Top 100 Non-Fiction Books of All Time',
+  'Top 100 Fiction Books of All Time',
+  'Best Psychology Books',
+  'Best Technology Books',
+  'Deep Mental Health Books',
+  'Best Nonfiction Books',
+  'Best Business Books',
+  'Best Motivational Books',
+  'Best Relationship Books',
+  'Best Design Books',
+  'Best Food Books'
+];
 
 function Home() {
-  const [books, setBooks] = useState([]);
+  const [books, setBooks] = useState({});
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingCategories, setLoadingCategories] = useState({});
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const [showFallback, setShowFallback] = useState(false);
@@ -72,14 +127,13 @@ function Home() {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
 
-  const fetchBooks = async (searchQuery = '', pageNum = 1) => {
+  // Fetch books for a specific category
+  const fetchCategoryBooks = async (category, pageNum = 1) => {
     try {
-      setLoading(true);
-      setError(null);
-      setShowFallback(false);
+      setLoadingCategories(prev => ({ ...prev, [category]: true }));
       
-      let apiUrl = `/api/books?search=${encodeURIComponent(searchQuery)}&page=${pageNum}`;
-      console.log(`Fetching books from: ${apiUrl}`);
+      let apiUrl = `/api/books?search=${encodeURIComponent(category)}&page=${pageNum}`;
+      console.log(`Fetching ${category} books from: ${apiUrl}`);
       
       let response = await fetch(apiUrl);
       
@@ -87,12 +141,11 @@ function Home() {
       if (!response.ok || response.headers.get('content-type')?.includes('text/html')) {
         console.warn('First API attempt failed, trying absolute URL');
         
-        // Try with absolute URL (development or serverless function not responding)
         const baseUrl = window.location.hostname === 'localhost' ? 
           'http://localhost:3000' : // Use port 3000 for the Express server
           window.location.origin;
           
-        apiUrl = `${baseUrl}/api/books?search=${encodeURIComponent(searchQuery)}&page=${pageNum}`;
+        apiUrl = `${baseUrl}/api/books?search=${encodeURIComponent(category)}&page=${pageNum}`;
         console.log(`Retrying with: ${apiUrl}`);
         
         response = await fetch(apiUrl);
@@ -114,167 +167,191 @@ function Home() {
         throw new Error('Invalid data format received from server');
       }
       
-      setBooks(data.results);
-      setPage(pageNum);
+      // Update the books state with this category
+      setBooks(prev => ({
+        ...prev,
+        [category]: data.results.slice(0, 5) // Only take first 5 books for each category
+      }));
+      
     } catch (error) {
-      console.error('Error fetching books:', error);
-      setError(`Failed to fetch books: ${error.message}`);
-      setShowFallback(true);
-      setBooks([]);
+      console.error(`Error fetching ${category} books:`, error);
+      
+      // Use fallback if available
+      if (showFallback) {
+        setBooks(prev => ({
+          ...prev,
+          [category]: generateFallbackBooks(category, 5)
+        }));
+      }
     } finally {
-      setLoading(false);
+      setLoadingCategories(prev => ({ ...prev, [category]: false }));
     }
   };
 
+  // Generate fallback books if API fails
+  const generateFallbackBooks = (category, count) => {
+    // This would be replaced with actual fallback logic
+    return Array(count).fill(null).map((_, index) => ({
+      id: `fallback-${category}-${index}`,
+      title: `${category} Book ${index + 1}`,
+      authors: [{name: 'Author Name'}],
+      formats: {'image/jpeg': '/placeholder-book.jpg'},
+      download_count: Math.floor(Math.random() * 1000),
+      rating: (4 + Math.random()).toFixed(1)
+    }));
+  };
+
   useEffect(() => {
-    fetchBooks();
-  }, []);
+    // Fetch the first few categories initially
+    const initialCategories = bookCategories.slice(0, 4);
+    initialCategories.forEach(category => {
+      fetchCategoryBooks(category);
+    });
+    
+    // Lazy load the rest as user scrolls
+    const lazyLoadCategories = () => {
+      const scrollPosition = window.scrollY + window.innerHeight;
+      const pageHeight = document.body.scrollHeight;
+      
+      if (scrollPosition > pageHeight * 0.7) {
+        // Load more categories as user scrolls down
+        const remainingCategories = bookCategories.slice(4);
+        remainingCategories.forEach(category => {
+          if (!books[category] && !loadingCategories[category]) {
+            fetchCategoryBooks(category);
+          }
+        });
+        
+        // Remove scroll listener once all categories are loaded
+        if (Object.keys(books).length >= bookCategories.length) {
+          window.removeEventListener('scroll', lazyLoadCategories);
+        }
+      }
+    };
+    
+    window.addEventListener('scroll', lazyLoadCategories);
+    return () => window.removeEventListener('scroll', lazyLoadCategories);
+  }, [books, loadingCategories]);
 
   const handleSearch = (e) => {
     e.preventDefault();
-    fetchBooks(search, 1);
-  };
-  
-  const handleRetry = () => {
-    fetchBooks(search, page);
+    if (search.trim()) {
+      navigate(`/search?query=${encodeURIComponent(search)}`);
+    }
   };
   
   const handleBookSelect = (bookId) => {
     navigate(`/book/${bookId}`);
   };
 
+  // Function to generate star rating display
+  const renderRating = (rating) => {
+    const ratingNum = parseFloat(rating) || 4.5;
+    return (
+      <BookRating>
+        {'★★★★★'.slice(0, Math.floor(ratingNum))}
+        {ratingNum % 1 > 0 ? '☆' : ''}
+        <span className="count">({ratingNum})</span>
+      </BookRating>
+    );
+  };
+
   return (
-    <Container maxWidth="lg" sx={{ px: isMobile ? 2 : 3, mb: { xs: 8, md: 8 }, flex: '1 0 auto' }}>
-      <SearchContainer>
-        <ResponsiveHeading variant="h1" gutterBottom>
-          Hear the Story Come Alive
-        </ResponsiveHeading>
-        <ResponsiveSubheading variant="h5" color="textSecondary" paragraph>
-          Experience books like never before with immersive AI-powered soundscapes
-        </ResponsiveSubheading>
+    <Container maxWidth="lg" className="home-container">
+      {/* Hero Section with Search */}
+      <Box className="hero-section">
+        <Typography variant="h1" className="main-heading">
+          Read any book in 10 minutes
+        </Typography>
+        <Typography variant="body1" className="sub-heading">
+          73,530 book summaries with audio • 24 languages
+          Best for busy folks for a key takeaways
+        </Typography>
+        
         <Box
           component="form"
           onSubmit={handleSearch}
-          sx={{
-            display: 'flex',
-            flexDirection: isMobile ? 'column' : 'row',
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: isMobile ? 2 : 1,
-            mt: 4,
-            width: '100%',
-            maxWidth: '100%',
-          }}
+          className="search-form"
         >
-          <TextField
+          <SearchInput
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by title, author, or subject..."
-            variant="outlined"
+            placeholder="Search for book summaries..."
             fullWidth
-            sx={{ 
-              width: '100%', 
-              maxWidth: isMobile ? '100%' : 600 
+            variant="outlined"
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon />
+                </InputAdornment>
+              ),
             }}
           />
-          <Button
-            type="submit"
-            variant="contained"
-            size={isMobile ? "medium" : "large"}
-            startIcon={<Search />}
-            fullWidth={isMobile}
-            sx={{ 
-              minWidth: isMobile ? '100%' : 'auto',
-              height: isMobile ? '48px' : 'auto'
-            }}
-          >
-            Search
-          </Button>
         </Box>
-      </SearchContainer>
+      </Box>
 
-      {error && !showFallback && (
-        <Alert severity="error" sx={{ mb: 4 }}>
-          {error}
-        </Alert>
-      )}
-
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-          <CircularProgress />
-        </Box>
-      ) : showFallback ? (
-        <FallbackLibrary onRetry={handleRetry} onBookSelect={handleBookSelect} />
-      ) : (
-        <Grid container spacing={isMobile ? 2 : 4}>
-          {books.length === 0 && !loading && !error ? (
-            <Grid item xs={12}>
-              <Typography variant="h6" textAlign="center" color="textSecondary">
-                No books found. Try a different search term.
-              </Typography>
-            </Grid>
-          ) : (
-            books.map((book) => (
-              <Grid item key={book.id} xs={12} sm={6} md={4} lg={3}>
-                <BookCard>
-                  <CardMedia
-                    component="img"
-                    height={isMobile ? "200" : isTablet ? "250" : "300"}
-                    image={book.formats['image/jpeg']}
-                    alt={book.title}
-                    onError={(e) => {
-                      e.target.src = '/placeholder-book.jpg';
-                    }}
-                  />
-                  <CardContent sx={{ flexGrow: 1 }}>
-                    <Typography 
-                      gutterBottom 
-                      variant={isMobile ? "subtitle1" : "h6"} 
-                      component="h2"
-                      sx={{
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                        lineHeight: 1.3,
-                        minHeight: isMobile ? '40px' : '48px'
+      {/* Book Categories */}
+      {bookCategories.map((category) => (
+        <CategorySection key={category}>
+          <SectionHeading variant="h2">
+            {category}
+            <span className="see-all">See all</span>
+          </SectionHeading>
+          
+          <Grid container spacing={2}>
+            {loadingCategories[category] ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%', py: 4 }}>
+                <CircularProgress size={30} />
+              </Box>
+            ) : books[category] && books[category].length > 0 ? (
+              books[category].map((book) => (
+                <Grid item key={book.id} xs={6} sm={4} md={2.4}>
+                  <BookCard onClick={() => handleBookSelect(book.id)}>
+                    <BookCover
+                      image={book.formats['image/jpeg'] || '/placeholder-book.jpg'}
+                      title={book.title}
+                      onError={(e) => {
+                        e.target.src = '/placeholder-book.jpg';
                       }}
-                    >
-                      {book.title}
-                    </Typography>
-                    <Typography 
-                      variant="body2" 
-                      color="textSecondary"
-                      sx={{
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        display: '-webkit-box',
-                        WebkitLineClamp: 1,
-                        WebkitBoxOrient: 'vertical'
-                      }}
-                    >
-                      {book.authors.map((author) => author.name).join(', ')}
-                    </Typography>
-                  </CardContent>
-                  <Button
-                    fullWidth
-                    variant="contained"
-                    onClick={() => navigate(`/book/${book.id}`)}
-                    sx={{ 
-                      borderTopLeftRadius: 0, 
-                      borderTopRightRadius: 0,
-                      py: isMobile ? 1 : 1.5
-                    }}
-                  >
-                    Start Reading
-                  </Button>
-                </BookCard>
+                    />
+                    <CardContent sx={{ px: 0, py: 1 }}>
+                      <Typography
+                        variant="subtitle2"
+                        sx={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          lineHeight: 1.2,
+                          minHeight: '2.4em',
+                          fontWeight: 500
+                        }}
+                      >
+                        {book.title}
+                      </Typography>
+                      {renderRating(book.rating || 4.5)}
+                      <Typography 
+                        variant="caption" 
+                        color="text.secondary"
+                        sx={{ display: 'block', mt: 0.5 }}
+                      >
+                        {(book.authors && book.authors[0]?.name) || 'Unknown Author'}
+                      </Typography>
+                    </CardContent>
+                  </BookCard>
+                </Grid>
+              ))
+            ) : (
+              <Grid item xs={12}>
+                <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+                  No books found for this category.
+                </Typography>
               </Grid>
-            ))
-          )}
-        </Grid>
-      )}
+            )}
+          </Grid>
+        </CategorySection>
+      ))}
     </Container>
   );
 }

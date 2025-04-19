@@ -11,12 +11,14 @@ import SignUp from './pages/Auth/SignUp';
 import About from './pages/About';
 import Contact from './pages/Contact';
 import Profile from './pages/Profile';
+import ProfilePage from './pages/ProfilePage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import OnboardingWizard from './components/OnboardingWizard';
 import { CircularProgress, Box } from '@mui/material';
 import { supabase } from './lib/supabase';
 import { debugAuth, handleHashRedirect } from './util/debugAuth';
 import { debugOAuthRedirects, fixOAuthRedirectIssues } from './util/debugOAuth';
+import AuthCallback from './components/auth/AuthCallback';
+import AuthStatus from './pages/Auth/AuthStatus';
 
 // Create a base theme with dark mode settings
 let theme = createTheme({
@@ -29,20 +31,26 @@ let theme = createTheme({
       main: '#9c27b0',
     },
     background: {
-      default: '#1a1625',
-      paper: '#241f35',
+      default: '#0a0a0a',
+      paper: '#111111',
     },
+    text: {
+      primary: '#ffffff',
+      secondary: '#a0a0a0',
+    }
   },
   typography: {
-    fontFamily: "'Playfair Display', serif",
+    fontFamily: "'Inter', 'Roboto', 'Helvetica', 'Arial', sans-serif",
     h1: {
       fontWeight: 700,
+      fontSize: '2.5rem',
     },
     h2: {
       fontWeight: 600,
+      fontSize: '1.3rem',
     },
     body1: {
-      fontSize: '1.1rem',
+      fontSize: '1rem',
     },
   },
   components: {
@@ -66,6 +74,32 @@ let theme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: { xs: 8, sm: 12 },
+          backgroundColor: '#111111',
+        },
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          backgroundColor: 'transparent',
+          boxShadow: 'none',
+        },
+      },
+    },
+    MuiCardContent: {
+      styleOverrides: {
+        root: {
+          padding: '8px 0',
+          '&:last-child': {
+            paddingBottom: 8,
+          }
+        },
+      },
+    },
+    MuiInputBase: {
+      styleOverrides: {
+        root: {
+          backgroundColor: 'rgba(255, 255, 255, 0.05)',
         },
       },
     },
@@ -103,6 +137,32 @@ const HandleOAuthRedirect = () => {
   const location = useLocation();
   
   useEffect(() => {
+    // CRITICAL: Check if we're mistakenly on localhost in production
+    const isProduction = process.env.NODE_ENV === 'production';
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    
+    if (isProduction && isLocalhost) {
+      console.error('🚨 CRITICAL ERROR: Detected localhost in production environment!');
+      
+      // Only redirect if this appears to be an OAuth callback (has hash with tokens)
+      if (window.location.hash && (
+          window.location.hash.includes('access_token') || 
+          window.location.hash.includes('error=')
+      )) {
+        console.error('OAuth redirect to localhost detected in production - redirecting to production URL');
+        
+        const productionUrl = 'https://joinstoria.vercel.app';
+        const redirectUrl = productionUrl + 
+          window.location.pathname + 
+          window.location.search + 
+          window.location.hash;
+        
+        console.log('Redirecting to:', redirectUrl);
+        window.location.replace(redirectUrl);
+        return;
+      }
+    }
+  
     // Check if there's a hash in the URL (common for OAuth redirects)
     if (location.hash || location.search) {
       console.log('Detected potential auth redirect in HandleOAuthRedirect component');
@@ -140,12 +200,15 @@ const HandleOAuthRedirect = () => {
   return null;
 };
 
-// Protected route component
+// Protected route component - redirect users to profile if they need to complete it
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, needsProfile } = useAuth();
 
   if (loading) return <LoadingScreen />;
   if (!isAuthenticated) return <Navigate to="/login" />;
+  
+  // If user needs to complete their profile, redirect to profile page
+  if (needsProfile) return <Navigate to="/profile-setup" />;
   
   return children;
 };
@@ -173,7 +236,7 @@ const LandingPage = () => {
 
 // App content component that has access to auth context
 const AppContent = () => {
-  const { showOnboarding, loading } = useAuth();
+  const { loading, needsProfile } = useAuth();
 
   if (loading) return <LoadingScreen />;
 
@@ -185,7 +248,6 @@ const AppContent = () => {
     }}>
       <HandleOAuthRedirect />
       <Navbar />
-      {showOnboarding && <OnboardingWizard />}
       <Box sx={{ flex: 1 }}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
@@ -205,6 +267,11 @@ const AppContent = () => {
               </PublicRoute>
             } 
           />
+          {/* Auth Routes */}
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/auth/v2/callback" element={<AuthCallback />} />
+          <Route path="/auth/status" element={<AuthStatus />} />
+          
           <Route 
             path="/books" 
             element={
@@ -229,6 +296,13 @@ const AppContent = () => {
               <ProtectedRoute>
                 <Profile />
               </ProtectedRoute>
+            } 
+          />
+          {/* New profile setup page - for both new users and profile editing */}
+          <Route 
+            path="/profile-setup" 
+            element={
+              <ProfilePage />
             } 
           />
           <Route path="*" element={<Navigate to="/" replace />} />

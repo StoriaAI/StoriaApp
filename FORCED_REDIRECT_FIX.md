@@ -16,7 +16,7 @@ In `src/lib/supabase.js`, we now explicitly specify the redirect URL based on th
 
 ```javascript
 const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const productionUrl = 'https://storia-app.vercel.app'; // Your production URL
+const productionUrl = 'https://joinstoria.vercel.app'; // Your production URL
 
 const redirectUrl = isLocalhost ? window.location.origin : productionUrl;
 
@@ -52,7 +52,7 @@ In both the Login and SignUp components, we've added code that:
 const { hasIssue } = detectRedirectIssue();
 if (hasIssue) {
   // If we're in production but on localhost, redirect to production URL
-  const productionUrl = 'https://storia-app.vercel.app';
+  const productionUrl = 'https://joinstoria.vercel.app';
   window.location.href = productionUrl;
   return;
 }

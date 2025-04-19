@@ -14,7 +14,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
-import { signUp, signInWithGoogle } from '../../lib/supabase';
+import { signUp, signInWithGoogle, PRODUCTION_URL } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import GoogleIcon from '@mui/icons-material/Google';
 import { debugOAuthRedirects, fixOAuthRedirectIssues } from '../../util/debugOAuth';
@@ -28,25 +28,27 @@ const SignUp = () => {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
   const [debugInfo, setDebugInfo] = useState(null);
+  const [signInError, setSignInError] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, signup, signInWithGoogle } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   useEffect(() => {
+    // Check for production environment but on localhost URL
+    const isProduction = process.env.NODE_ENV === 'production';
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    
+    // If we detect we're on localhost in production, force redirect
+    if (isProduction && isLocalhost) {
+      console.log('🚨 SignUp component detected localhost in production, redirecting to:', PRODUCTION_URL);
+      window.location.replace(PRODUCTION_URL); // Use replace instead of href for cleaner history
+      return; // Exit early, no need to continue
+    }
+    
     // Log redirect info to help with debugging
     logRedirectInfo();
-    
-    // Check for redirect issues (like being on localhost in production)
-    const { hasIssue } = detectRedirectIssue();
-    if (hasIssue) {
-      // If we're in production but on localhost, redirect to production URL
-      const productionUrl = 'https://storia-app.vercel.app'; // Replace with your actual production URL
-      console.log('⚠️ Detected we are on localhost in production. Redirecting to:', productionUrl);
-      window.location.href = productionUrl;
-      return;
-    }
 
     // Check for OAuth hash or errors in the URL
     if (location.hash || location.search) {
@@ -116,31 +118,19 @@ const SignUp = () => {
     }
   };
   
-  const handleGoogleSignUp = async () => {
+  const handleGoogleSignUp = async (e) => {
+    e.preventDefault();
+    setGoogleLoading(true);
+    setSignInError(null);
     try {
-      setGoogleLoading(true);
-      setError('');
-      
-      // Clean up the URL in case it has any auth params from a failed login
-      if (location.hash || location.search) {
-        window.history.replaceState(null, '', window.location.pathname);
+      console.log('Initiating Google signup');
+      const { error } = await signInWithGoogle();
+      if (error) {
+        throw error;
       }
-      
-      // Log debug info before initiating sign-up
-      debugOAuthRedirects();
-      
-      const { error: googleSignInError } = await signInWithGoogle();
-      
-      if (googleSignInError) throw googleSignInError;
-      
-      // The redirect will happen automatically by Supabase
-      // We'll set a fallback for when we return
-      setTimeout(() => {
-        setGoogleLoading(false);
-      }, 5000);
-    } catch (err) {
-      console.error('Google sign up error:', err);
-      setError(err.message || 'Failed to sign up with Google.');
+    } catch (error) {
+      console.error('Google signup error:', error.message);
+      setSignInError(error.message);
       setGoogleLoading(false);
     }
   };
