@@ -36,6 +36,8 @@ module.exports = async (req, res) => {
     const { search = '', page = 1, id } = req.query;
     const baseUrl = 'https://gutendex.com/books';
     const params = new URLSearchParams();
+    
+    // Build query parameters
     if (id) {
       params.append('ids', id);
     } else {
@@ -46,80 +48,80 @@ module.exports = async (req, res) => {
     // Log the request details
     console.log(`Fetching books from: ${baseUrl}?${params.toString()}`);
 
-    let retries = 0;
-    const maxRetries = 3;
-    let response;
-
-    // Try fetching with retries
-    while (retries < maxRetries) {
-      try {
-        response = await axios.get(`${baseUrl}?${params.toString()}`, {
-          headers: {
-            'Accept': 'application/json',
-            'User-Agent': 'Storia/1.0 (https://joinstoria.vercel.app)'
-          },
-          timeout: 10000 // 10 second timeout
-        });
-        break; // If successful, exit the retry loop
-      } catch (error) {
-        retries++;
-        console.error(`Attempt ${retries} failed: ${error.message}`);
-        
-        if (retries >= maxRetries) {
-          throw error; // Give up after max retries
-        }
-        
-        // Wait before retrying (exponential backoff)
-        await new Promise(r => setTimeout(r, retries * 1000));
-      }
-    }
-
-    // Transform results: try to pick a prioritized text format URL
-    const transformedResults = response.data.results.map(book => {
-      const formatPriorities = [
-        'text/plain; charset=utf-8',
-        'text/plain; charset=us-ascii',
-        'text/plain; charset=iso-8859-1',
-        'text/plain',
-        'text/plain; charset=windows-1252',
-        'text/html',
-        'text/html; charset=utf-8'
-      ];
-      let textUrl = null;
-      let formatType = null;
-      for (const fmt of formatPriorities) {
-        if (book.formats[fmt]) {
-          textUrl = book.formats[fmt];
-          formatType = fmt;
-          break;
-        }
-      }
-      // Fallback: if no text URL found, use the proxy endpoint below
-      if (!textUrl || typeof textUrl !== 'string' || textUrl.trim() === '') {
-        textUrl = `/api/read?id=${book.id}`;
-        formatType = 'text/plain';
-      }
-      return {
-        id: book.id,
-        title: book.title,
-        authors: book.authors,
-        formats: {
-          'image/jpeg': book.formats['image/jpeg'] ||
-                        book.formats['image/jpg'] ||
-                        book.formats['image/png'] ||
-                        null,
-          'text/plain': textUrl,
-          format_type: formatType
-        },
-        download_count: book.download_count,
-        languages: book.languages
-      };
+    // Make request to Gutenberg API
+    const response = await axios.get(`${baseUrl}?${params.toString()}`, {
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Storia/1.0'
+      },
+      timeout: 10000 // 10 second timeout
     });
 
-    // Set response headers
-    res.setHeader('Content-Type', 'application/json');
-    
-    // Return the transformed data
+    // Transform API results to our simplified format
+    const transformedResults = response.data.results
+      .filter(book => book.title && book.id) // Filter out invalid books
+      .map(book => {
+        // Find the best available text format
+        let textUrl = null;
+        const textFormats = [
+          'text/plain; charset=utf-8',
+          'text/plain; charset=us-ascii',
+          'text/plain',
+          'text/plain; charset=iso-8859-1'
+        ];
+        
+        for (const fmt of textFormats) {
+          if (book.formats[fmt]) {
+            textUrl = book.formats[fmt];
+            break;
+          }
+        }
+        
+        // If no text URL found, use our read API
+        if (!textUrl) {
+          textUrl = `/api/read/${book.id}`;
+        }
+        
+        // Find the best available image format
+        let imageUrl = null;
+        const imageFormats = [
+          'image/jpeg',
+          'image/jpg',
+          'image/png'
+        ];
+        
+        for (const fmt of imageFormats) {
+          if (book.formats[fmt] && !book.formats[fmt].includes('small') && !book.formats[fmt].includes('logo')) {
+            imageUrl = book.formats[fmt];
+            break;
+          }
+        }
+        
+        // Set default placeholder if no image available
+        if (!imageUrl) {
+          imageUrl = '/placeholder-book.jpg';
+        }
+        
+        // Author formatting
+        const authorName = book.authors.length > 0 
+          ? book.authors[0].name 
+          : 'Unknown Author';
+        
+        // Return simplified book object
+        return {
+          id: book.id,
+          title: book.title,
+          authors: book.authors,
+          formats: {
+            'image/jpeg': imageUrl,
+            'text/plain': textUrl
+          },
+          download_count: book.download_count || 0,
+          languages: book.languages || ['en']
+        };
+      });
+
+    // Return the results with standard format
     res.status(200).json({
       count: response.data.count,
       next: response.data.next,
@@ -132,8 +134,7 @@ module.exports = async (req, res) => {
     // Send a proper error response
     res.status(500).json({
       error: 'Failed to fetch books',
-      details: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      details: error.message
     });
   }
 }; 

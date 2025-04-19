@@ -12,6 +12,9 @@ import About from './pages/About';
 import Contact from './pages/Contact';
 import Profile from './pages/Profile';
 import ProfilePage from './pages/ProfilePage';
+import Search from './pages/Search';
+import Pricing from './pages/Pricing';
+import Settings from './pages/Settings';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { CircularProgress, Box } from '@mui/material';
 import { supabase } from './lib/supabase';
@@ -225,13 +228,7 @@ const PublicRoute = ({ children }) => {
 
 // Landing page component
 const LandingPage = () => {
-  const { isAuthenticated } = useAuth();
-  
-  if (isAuthenticated) {
-    return <Home />;
-  }
-  
-  return <Navigate to="/login" />;
+  return <Home />;
 };
 
 // App content component that has access to auth context
@@ -250,7 +247,7 @@ const AppContent = () => {
       <Navbar />
       <Box sx={{ flex: 1 }}>
         <Routes>
-          <Route path="/" element={<LandingPage />} />
+          <Route path="/" element={<Home />} />
           <Route 
             path="/login" 
             element={
@@ -272,24 +269,12 @@ const AppContent = () => {
           <Route path="/auth/v2/callback" element={<AuthCallback />} />
           <Route path="/auth/status" element={<AuthStatus />} />
           
-          <Route 
-            path="/books" 
-            element={
-              <ProtectedRoute>
-                <Home />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/book/:id" 
-            element={
-              <ProtectedRoute>
-                <BookReader />
-              </ProtectedRoute>
-            } 
-          />
+          {/* Make Book Reader available without authentication */}
+          <Route path="/book/:id" element={<BookReader />} />
+          
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/pricing" element={<Pricing />} />
           <Route 
             path="/profile" 
             element={
@@ -304,6 +289,20 @@ const AppContent = () => {
             element={
               <ProfilePage />
             } 
+          />
+          {/* Settings page - for authenticated users */}
+          <Route 
+            path="/settings" 
+            element={
+              <ProtectedRoute>
+                <Settings />
+              </ProtectedRoute>
+            } 
+          />
+          {/* Search page - accessible to both authenticated and non-authenticated users */}
+          <Route 
+            path="/search" 
+            element={<Search />} 
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
