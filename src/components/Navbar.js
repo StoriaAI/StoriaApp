@@ -70,7 +70,7 @@ function Navbar() {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, needsProfile } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [profileMenuAnchor, setProfileMenuAnchor] = useState(null);
 
@@ -176,6 +176,29 @@ function Navbar() {
               </ListItemIcon>
               <ListItemText 
                 primary="Profile" 
+                primaryTypographyProps={{ 
+                  fontFamily: "'Playfair Display', serif",
+                  fontWeight: 600,
+                  color: theme.palette.primary.main
+                }}
+              />
+            </ListItem>
+            <ListItem 
+              button 
+              component={RouterLink}
+              to="/profile-setup"
+              sx={{ 
+                py: 1.5,
+                '&:hover': {
+                  backgroundColor: 'rgba(244, 228, 188, 0.1)',
+                } 
+              }}
+            >
+              <ListItemIcon sx={{ color: theme.palette.primary.main, minWidth: 40 }}>
+                <PersonAdd />
+              </ListItemIcon>
+              <ListItemText 
+                primary="Edit Profile Info" 
                 primaryTypographyProps={{ 
                   fontFamily: "'Playfair Display', serif",
                   fontWeight: 600,
@@ -346,6 +369,14 @@ function Navbar() {
                   >
                     <AccountCircle sx={{ mr: 2 }} />
                     Profile
+                  </MenuItem>
+                  <MenuItem 
+                    onClick={handleProfileMenuClose} 
+                    component={RouterLink} 
+                    to="/profile-setup"
+                  >
+                    <PersonAdd sx={{ mr: 2 }} />
+                    Edit Profile Info
                   </MenuItem>
                   <Divider />
                   <MenuItem onClick={handleLogout}>

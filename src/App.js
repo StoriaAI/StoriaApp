@@ -11,8 +11,8 @@ import SignUp from './pages/Auth/SignUp';
 import About from './pages/About';
 import Contact from './pages/Contact';
 import Profile from './pages/Profile';
+import ProfilePage from './pages/ProfilePage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import OnboardingWizard from './components/OnboardingWizard';
 import { CircularProgress, Box } from '@mui/material';
 import { supabase } from './lib/supabase';
 import { debugAuth, handleHashRedirect } from './util/debugAuth';
@@ -168,12 +168,15 @@ const HandleOAuthRedirect = () => {
   return null;
 };
 
-// Protected route component
+// Protected route component - redirect users to profile if they need to complete it
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, needsProfile } = useAuth();
 
   if (loading) return <LoadingScreen />;
   if (!isAuthenticated) return <Navigate to="/login" />;
+  
+  // If user needs to complete their profile, redirect to profile page
+  if (needsProfile) return <Navigate to="/profile-setup" />;
   
   return children;
 };
@@ -201,7 +204,7 @@ const LandingPage = () => {
 
 // App content component that has access to auth context
 const AppContent = () => {
-  const { showOnboarding, loading } = useAuth();
+  const { loading, needsProfile } = useAuth();
 
   if (loading) return <LoadingScreen />;
 
@@ -213,7 +216,6 @@ const AppContent = () => {
     }}>
       <HandleOAuthRedirect />
       <Navbar />
-      {showOnboarding && <OnboardingWizard />}
       <Box sx={{ flex: 1 }}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
@@ -262,6 +264,13 @@ const AppContent = () => {
               <ProtectedRoute>
                 <Profile />
               </ProtectedRoute>
+            } 
+          />
+          {/* New profile setup page - for both new users and profile editing */}
+          <Route 
+            path="/profile-setup" 
+            element={
+              <ProfilePage />
             } 
           />
           <Route path="*" element={<Navigate to="/" replace />} />

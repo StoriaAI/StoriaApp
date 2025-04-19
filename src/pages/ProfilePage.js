@@ -49,7 +49,7 @@ const AI_FEATURES = [
 ];
 
 const ProfilePage = () => {
-  const { user } = useAuth();
+  const { user, needsProfile, setNeedsProfile } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -345,7 +345,20 @@ const ProfilePage = () => {
       
       if (updateError) throw updateError;
       
+      // Update the needsProfile state to false since profile is now completed
+      if (needsProfile) {
+        setNeedsProfile(false);
+      }
+      
       setSuccessMessage('Profile updated successfully!');
+      
+      // If user was redirected here because they needed to complete their profile,
+      // redirect them back to homepage after a short delay
+      if (needsProfile) {
+        setTimeout(() => {
+          navigate('/');
+        }, 1500);
+      }
     } catch (err) {
       console.error('Error saving profile:', err);
       setError('Error saving your profile. Please try again.');
@@ -370,8 +383,14 @@ const ProfilePage = () => {
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
       <Typography variant="h4" component="h1" gutterBottom>
-        Your Profile
+        {needsProfile ? 'Complete Your Profile' : 'Your Profile'}
       </Typography>
+      
+      {needsProfile && (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          Please complete your profile information to continue using Storia.
+        </Alert>
+      )}
       
       <Divider sx={{ mb: 4 }} />
       
@@ -639,7 +658,7 @@ const ProfilePage = () => {
           disabled={loading}
           sx={{ px: 4, py: 1 }}
         >
-          {loading ? 'Saving...' : 'Save Profile'}
+          {loading ? 'Saving...' : (needsProfile ? 'Complete Profile' : 'Save Profile')}
         </Button>
       </Box>
     </Container>
