@@ -39,29 +39,52 @@ import { signOut } from '../lib/supabase';
 import '../styles/Navbar.css';
 
 const StyledAppBar = styled(AppBar)(({ theme }) => ({
-  background: 'transparent',
+  background: theme.palette.background.default,
   boxShadow: 'none',
   borderBottom: `1px solid ${theme.palette.divider}`,
+  height: 64,
 }));
 
 const Logo = styled(Typography)(({ theme }) => ({
-  fontFamily: "'Playfair Display', serif",
   fontWeight: 700,
-  color: theme.palette.primary.main,
+  color: theme.palette.text.primary,
   textDecoration: 'none',
+  display: 'flex',
+  alignItems: 'center',
   [theme.breakpoints.down('sm')]: {
-    fontSize: '1.75rem',
+    fontSize: '1.25rem',
   },
   [theme.breakpoints.up('sm')]: {
-    fontSize: '2rem',
+    fontSize: '1.5rem',
   },
 }));
 
+const LogoDot = styled('span')(({ theme }) => ({
+  display: 'inline-block',
+  width: '8px',
+  height: '8px',
+  borderRadius: '50%',
+  backgroundColor: theme.palette.primary.main,
+  marginRight: '6px',
+}));
+
 const NavButton = styled(Button)(({ theme }) => ({
-  color: theme.palette.primary.main,
+  color: theme.palette.text.primary,
   marginLeft: theme.spacing(2),
+  textTransform: 'none',
   '&:hover': {
-    backgroundColor: 'rgba(244, 228, 188, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+}));
+
+const NavLink = styled(RouterLink)(({ theme }) => ({
+  color: theme.palette.text.secondary,
+  textDecoration: 'none',
+  fontSize: '0.9rem',
+  marginRight: theme.spacing(3),
+  transition: 'color 0.2s',
+  '&:hover': {
+    color: theme.palette.text.primary,
   },
 }));
 
@@ -103,15 +126,19 @@ function Navbar() {
   };
 
   const navItems = [
-    { name: 'Home', icon: <HomeIcon />, path: '/' },
-    { name: 'Books', icon: <LibraryBooks />, path: '/books' },
-    { name: 'About', icon: <Info />, path: '/about' },
-    { name: 'Contact', icon: <ContactMail />, path: '/contact' }
+    { name: 'Home', path: '/' },
+    { name: 'Explorer', path: '/books' },
+    { name: 'Library', path: '/library' },
+    { name: 'Pricing', path: '/pricing' }
   ];
 
   const DrawerList = () => (
     <Box
-      sx={{ width: 250 }}
+      sx={{ 
+        width: 250,
+        backgroundColor: theme.palette.background.default,
+        height: '100%',
+      }}
       role="presentation"
       onClick={toggleDrawer(false)}
       onKeyDown={toggleDrawer(false)}
@@ -123,7 +150,10 @@ function Navbar() {
         p: 2,
         borderBottom: `1px solid ${theme.palette.divider}`
       }}>
-        <Logo variant="h6">Storia</Logo>
+        <Logo variant="h6">
+          <LogoDot />
+          Storia
+        </Logo>
         <IconButton onClick={toggleDrawer(false)}>
           <CloseIcon />
         </IconButton>
@@ -138,19 +168,15 @@ function Navbar() {
             sx={{ 
               py: 1.5,
               '&:hover': {
-                backgroundColor: 'rgba(244, 228, 188, 0.1)',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
               } 
             }}
           >
-            <ListItemIcon sx={{ color: theme.palette.primary.main, minWidth: 40 }}>
-              {item.icon}
-            </ListItemIcon>
             <ListItemText 
               primary={item.name} 
               primaryTypographyProps={{ 
-                fontFamily: "'Playfair Display', serif",
-                fontWeight: 600,
-                color: theme.palette.primary.main
+                fontWeight: 500,
+                color: theme.palette.text.primary
               }}
             />
           </ListItem>
@@ -167,42 +193,18 @@ function Navbar() {
               sx={{ 
                 py: 1.5,
                 '&:hover': {
-                  backgroundColor: 'rgba(244, 228, 188, 0.1)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
                 } 
               }}
             >
-              <ListItemIcon sx={{ color: theme.palette.primary.main, minWidth: 40 }}>
+              <ListItemIcon sx={{ color: theme.palette.text.primary, minWidth: 40 }}>
                 <AccountCircle />
               </ListItemIcon>
               <ListItemText 
                 primary="Profile" 
                 primaryTypographyProps={{ 
-                  fontFamily: "'Playfair Display', serif",
-                  fontWeight: 600,
-                  color: theme.palette.primary.main
-                }}
-              />
-            </ListItem>
-            <ListItem 
-              button 
-              component={RouterLink}
-              to="/profile-setup"
-              sx={{ 
-                py: 1.5,
-                '&:hover': {
-                  backgroundColor: 'rgba(244, 228, 188, 0.1)',
-                } 
-              }}
-            >
-              <ListItemIcon sx={{ color: theme.palette.primary.main, minWidth: 40 }}>
-                <PersonAdd />
-              </ListItemIcon>
-              <ListItemText 
-                primary="Edit Profile Info" 
-                primaryTypographyProps={{ 
-                  fontFamily: "'Playfair Display', serif",
-                  fontWeight: 600,
-                  color: theme.palette.primary.main
+                  fontWeight: 500,
+                  color: theme.palette.text.primary
                 }}
               />
             </ListItem>
@@ -212,19 +214,18 @@ function Navbar() {
               sx={{ 
                 py: 1.5,
                 '&:hover': {
-                  backgroundColor: 'rgba(244, 228, 188, 0.1)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
                 } 
               }}
             >
-              <ListItemIcon sx={{ color: theme.palette.primary.main, minWidth: 40 }}>
+              <ListItemIcon sx={{ color: theme.palette.text.primary, minWidth: 40 }}>
                 <Logout />
               </ListItemIcon>
               <ListItemText 
-                primary="Log Out" 
+                primary="Logout" 
                 primaryTypographyProps={{ 
-                  fontFamily: "'Playfair Display', serif",
-                  fontWeight: 600,
-                  color: theme.palette.primary.main
+                  fontWeight: 500,
+                  color: theme.palette.text.primary
                 }}
               />
             </ListItem>
@@ -233,47 +234,45 @@ function Navbar() {
           <>
             <ListItem 
               button 
-              component={RouterLink} 
+              component={RouterLink}
               to="/login"
               sx={{ 
                 py: 1.5,
                 '&:hover': {
-                  backgroundColor: 'rgba(244, 228, 188, 0.1)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
                 } 
               }}
             >
-              <ListItemIcon sx={{ color: theme.palette.primary.main, minWidth: 40 }}>
+              <ListItemIcon sx={{ color: theme.palette.text.primary, minWidth: 40 }}>
                 <Login />
               </ListItemIcon>
               <ListItemText 
                 primary="Login" 
                 primaryTypographyProps={{ 
-                  fontFamily: "'Playfair Display', serif",
-                  fontWeight: 600,
-                  color: theme.palette.primary.main
+                  fontWeight: 500,
+                  color: theme.palette.text.primary
                 }}
               />
             </ListItem>
             <ListItem 
               button 
-              component={RouterLink} 
+              component={RouterLink}
               to="/signup"
               sx={{ 
                 py: 1.5,
                 '&:hover': {
-                  backgroundColor: 'rgba(244, 228, 188, 0.1)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
                 } 
               }}
             >
-              <ListItemIcon sx={{ color: theme.palette.primary.main, minWidth: 40 }}>
+              <ListItemIcon sx={{ color: theme.palette.text.primary, minWidth: 40 }}>
                 <PersonAdd />
               </ListItemIcon>
               <ListItemText 
                 primary="Sign Up" 
                 primaryTypographyProps={{ 
-                  fontFamily: "'Playfair Display', serif",
-                  fontWeight: 600,
-                  color: theme.palette.primary.main
+                  fontWeight: 500,
+                  color: theme.palette.text.primary
                 }}
               />
             </ListItem>
@@ -284,154 +283,141 @@ function Navbar() {
   );
 
   return (
-    <>
-      <StyledAppBar position="static">
-        <Container maxWidth="lg">
-          <Toolbar disableGutters sx={{ py: isMobile ? 1 : 1.5 }}>
-            {isMobile || isTablet ? (
-              <>
-                <IconButton
-                  color="primary"
-                  aria-label="open drawer"
-                  edge="start"
-                  onClick={toggleDrawer(true)}
-                  sx={{ mr: 2 }}
-                >
-                  <MenuIcon />
-                </IconButton>
-                <RouterLink to="/" style={{ textDecoration: 'none', flexGrow: 1 }}>
-                  <Logo>Storia</Logo>
-                </RouterLink>
-              </>
-            ) : (
-              <>
-                <RouterLink to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', marginRight: theme.spacing(4) }}>
-                  <Logo>Storia</Logo>
-                </RouterLink>
-                <Box sx={{ display: 'flex', flexGrow: 1 }}>
-                  {navItems.map((item) => (
-                    <NavButton
-                      key={item.name}
-                      component={RouterLink}
-                      to={item.path}
-                      startIcon={item.icon}
-                    >
-                      {item.name}
-                    </NavButton>
-                  ))}
-                </Box>
-              </>
-            )}
-            
+    <StyledAppBar position="sticky">
+      <Container maxWidth="lg">
+        <Toolbar disableGutters sx={{ minHeight: 64 }}>
+          {/* Mobile menu icon */}
+          {isMobile && (
+            <IconButton
+              color="inherit"
+              aria-label="open drawer"
+              onClick={toggleDrawer(true)}
+              edge="start"
+              sx={{ mr: 2 }}
+            >
+              <MenuIcon />
+            </IconButton>
+          )}
+          
+          {/* Logo */}
+          <Logo 
+            variant="h6" 
+            component={RouterLink} 
+            to="/"
+            sx={{ flexGrow: isMobile ? 1 : 0 }}
+          >
+            <LogoDot />
+            Storia
+          </Logo>
+          
+          {/* Desktop navigation */}
+          {!isMobile && (
+            <Box sx={{ ml: 4, flexGrow: 1, display: 'flex' }}>
+              {navItems.map((item) => (
+                <NavLink key={item.name} to={item.path}>
+                  {item.name}
+                </NavLink>
+              ))}
+            </Box>
+          )}
+          
+          {/* Authentication buttons */}
+          <Box>
             {isAuthenticated ? (
-              <Box>
-                <Tooltip title="Account settings">
-                  <IconButton
+              <>
+                <Tooltip title="Account">
+                  <IconButton 
                     onClick={handleProfileMenuOpen}
-                    size="small"
-                    sx={{ ml: 2 }}
-                    aria-controls={Boolean(profileMenuAnchor) ? 'account-menu' : undefined}
-                    aria-haspopup="true"
-                    aria-expanded={Boolean(profileMenuAnchor) ? 'true' : undefined}
+                    sx={{ ml: 1 }}
                   >
-                    {user?.user_metadata?.avatar_url ? (
-                      <Avatar 
-                        src={user.user_metadata.avatar_url} 
-                        alt={user.user_metadata?.full_name || 'User'} 
-                        sx={{ width: 40, height: 40 }}
-                      />
-                    ) : (
-                      <Avatar sx={{ width: 40, height: 40, bgcolor: 'primary.main', color: 'background.default' }}>
-                        {user?.user_metadata?.full_name ? user.user_metadata.full_name.charAt(0).toUpperCase() : 'U'}
-                      </Avatar>
-                    )}
+                    <Avatar 
+                      alt={user?.email || 'User'} 
+                      src="/static/avatar.jpg"
+                      sx={{ 
+                        width: 32, 
+                        height: 32,
+                        bgcolor: theme.palette.primary.main,
+                        color: theme.palette.background.default
+                      }}
+                    >
+                      {user?.email?.charAt(0).toUpperCase() || 'U'}
+                    </Avatar>
                   </IconButton>
                 </Tooltip>
+                
                 <Menu
                   anchorEl={profileMenuAnchor}
-                  id="account-menu"
                   open={Boolean(profileMenuAnchor)}
                   onClose={handleProfileMenuClose}
-                  PaperProps={{
-                    sx: {
-                      mt: 1.5,
-                      backgroundColor: theme.palette.background.paper,
-                      boxShadow: theme.shadows[4],
-                    },
+                  transformOrigin={{
+                    vertical: 'top',
+                    horizontal: 'right',
                   }}
-                  transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-                  anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+                  sx={{
+                    mt: 1.5,
+                    '& .MuiPaper-root': {
+                      backgroundColor: theme.palette.background.paper,
+                      minWidth: 180,
+                    }
+                  }}
                 >
                   <MenuItem 
-                    onClick={handleProfileMenuClose} 
                     component={RouterLink} 
                     to="/profile"
+                    onClick={handleProfileMenuClose}
                   >
-                    <AccountCircle sx={{ mr: 2 }} />
                     Profile
                   </MenuItem>
+                  
                   <MenuItem 
-                    onClick={handleProfileMenuClose} 
                     component={RouterLink} 
-                    to="/profile-setup"
+                    to="/settings"
+                    onClick={handleProfileMenuClose}
                   >
-                    <PersonAdd sx={{ mr: 2 }} />
-                    Edit Profile Info
+                    Settings
                   </MenuItem>
+                  
                   <Divider />
+                  
                   <MenuItem onClick={handleLogout}>
-                    <Logout sx={{ mr: 2 }} />
                     Logout
                   </MenuItem>
                 </Menu>
-              </Box>
+              </>
             ) : (
-              <Box>
+              <>
                 {!isMobile && (
-                  <>
-                    <Button
-                      component={RouterLink}
-                      to="/login"
-                      variant="outlined"
-                      sx={{
-                        borderColor: theme.palette.primary.main,
-                        color: theme.palette.primary.main,
-                        mr: 1,
-                      }}
-                    >
-                      Login
-                    </Button>
-                    <Button
-                      component={RouterLink}
-                      to="/signup"
-                      variant="contained"
-                      sx={{
-                        bgcolor: theme.palette.primary.main,
-                        color: theme.palette.background.default,
-                        '&:hover': {
-                          bgcolor: theme.palette.primary.dark,
-                        },
-                      }}
-                    >
-                      Sign Up
-                    </Button>
-                  </>
-                )}
-                {isMobile && (
-                  <IconButton
-                    color="primary"
-                    aria-label="menu"
-                    edge="end"
-                    onClick={toggleDrawer(true)}
+                  <Button 
+                    component={RouterLink} 
+                    to="/login"
+                    variant="text"
+                    color="inherit"
+                    sx={{ textTransform: 'none' }}
                   >
-                    <MenuIcon />
-                  </IconButton>
+                    Login
+                  </Button>
                 )}
-              </Box>
+                <Button 
+                  component={RouterLink} 
+                  to="/signup"
+                  variant="contained"
+                  color="primary"
+                  sx={{ 
+                    ml: 1.5,
+                    textTransform: 'none',
+                    borderRadius: '20px',
+                    px: 3,
+                  }}
+                >
+                  Sign Up
+                </Button>
+              </>
             )}
-          </Toolbar>
-        </Container>
-      </StyledAppBar>
+          </Box>
+        </Toolbar>
+      </Container>
+      
+      {/* Mobile drawer */}
       <Drawer
         anchor="left"
         open={drawerOpen}
@@ -439,7 +425,7 @@ function Navbar() {
       >
         <DrawerList />
       </Drawer>
-    </>
+    </StyledAppBar>
   );
 }
 

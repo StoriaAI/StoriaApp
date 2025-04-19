@@ -3,11 +3,10 @@
 */
 
 .footer {
-  background-color: #1a1625;
-  border-top: 1px solid rgba(244, 228, 188, 0.1);
-  padding: 4rem 0 2rem;
-  color: #c9c9c9;
-  margin-top: auto;
+  background-color: #0a0a0a !important;
+  border-top: 1px solid #222222 !important;
+  color: #ffffff;
+  padding: 40px 0 20px;
 }
 
 .footer-container {
@@ -67,12 +66,10 @@
 }
 
 .footer-title {
-  font-size: 1.2rem;
-  color: #f4e4bc;
-  margin-bottom: 1.5rem;
+  font-size: 14px;
   font-weight: 600;
-  position: relative;
-  display: inline-block;
+  margin-bottom: 16px;
+  color: #ffffff;
 }
 
 .footer-title::after {
@@ -97,16 +94,16 @@
 }
 
 .footer-link {
-  color: #c9c9c9;
+  color: #a0a0a0;
+  font-size: 14px;
   text-decoration: none;
-  font-size: 1rem;
-  transition: all 0.3s ease;
-  display: inline-block;
+  margin-bottom: 8px;
+  display: block;
+  transition: color 0.2s;
 }
 
 .footer-link:hover {
-  color: #f4e4bc;
-  transform: translateX(5px);
+  color: #ffffff;
 }
 
 .footer-contact-item {
@@ -180,35 +177,34 @@
   align-items: center;
 }
 
-.copyright {
-  font-size: 0.9rem;
-  color: #c9c9c9;
-}
-
-.copyright-link {
-  color: #f4e4bc;
-  text-decoration: none;
-  transition: all 0.3s ease;
-}
-
-.copyright-link:hover {
-  color: #9c27b0;
-}
-
-.footer-bottom-links {
+.copyright-section {
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid #222222;
   display: flex;
-  gap: 1.5rem;
+  justify-content: space-between;
+  align-items: center;
 }
 
-.footer-bottom-link {
-  font-size: 0.9rem;
-  color: #c9c9c9;
+.copyright-text {
+  color: #a0a0a0;
+  font-size: 12px;
+}
+
+.legal-links {
+  display: flex;
+  gap: 24px;
+}
+
+.legal-link {
+  color: #a0a0a0;
+  font-size: 12px;
   text-decoration: none;
-  transition: all 0.3s ease;
+  transition: color 0.2s;
 }
 
-.footer-bottom-link:hover {
-  color: #f4e4bc;
+.legal-link:hover {
+  color: #ffffff;
 }
 
 .back-to-top {
@@ -268,5 +264,15 @@
   .footer-bottom-links {
     justify-content: center;
     flex-wrap: wrap;
+  }
+  
+  .copyright-section {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  
+  .legal-links {
+    margin-top: 16px;
   }
 } 

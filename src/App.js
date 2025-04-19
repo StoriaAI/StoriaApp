@@ -31,20 +31,26 @@ let theme = createTheme({
       main: '#9c27b0',
     },
     background: {
-      default: '#1a1625',
-      paper: '#241f35',
+      default: '#0a0a0a',
+      paper: '#111111',
     },
+    text: {
+      primary: '#ffffff',
+      secondary: '#a0a0a0',
+    }
   },
   typography: {
-    fontFamily: "'Playfair Display', serif",
+    fontFamily: "'Inter', 'Roboto', 'Helvetica', 'Arial', sans-serif",
     h1: {
       fontWeight: 700,
+      fontSize: '2.5rem',
     },
     h2: {
       fontWeight: 600,
+      fontSize: '1.3rem',
     },
     body1: {
-      fontSize: '1.1rem',
+      fontSize: '1rem',
     },
   },
   components: {
@@ -68,6 +74,32 @@ let theme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: { xs: 8, sm: 12 },
+          backgroundColor: '#111111',
+        },
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          backgroundColor: 'transparent',
+          boxShadow: 'none',
+        },
+      },
+    },
+    MuiCardContent: {
+      styleOverrides: {
+        root: {
+          padding: '8px 0',
+          '&:last-child': {
+            paddingBottom: 8,
+          }
+        },
+      },
+    },
+    MuiInputBase: {
+      styleOverrides: {
+        root: {
+          backgroundColor: 'rgba(255, 255, 255, 0.05)',
         },
       },
     },
