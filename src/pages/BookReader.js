@@ -331,7 +331,7 @@ function BookReader() {
     }
   }, [loopMusic, musicUrl]);
 
-  const generateMusicForPage = async (pageNum, contentText = null) => {
+  const generateMusicForPage = async (pageNum, contentText = null, retryCount = 0) => {
     // Use provided content or get from state
     const pageContent = contentText || pageContents[pageNum];
     
@@ -373,6 +373,28 @@ function BookReader() {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
         console.error(`Server error for page ${pageNum}:`, errorData);
+        
+        // If it's a 401 error, show a more specific message
+        if (response.status === 401) {
+          setError(`Authentication error with music service. Please check API configuration.`);
+          throw new Error(`API authentication error: ${errorData.details || 'Invalid API key'}`);
+        }
+        
+        // If it's a 429 error (rate limit), retry after a delay
+        if (response.status === 429 && retryCount < 3) {
+          console.log(`Rate limit hit. Retrying after delay (${retryCount + 1}/3)...`);
+          setError(`Music service rate limit reached. Retrying in ${Math.pow(2, retryCount + 1)} seconds...`);
+          
+          // Wait with exponential backoff
+          await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount + 1)));
+          
+          // Clear error message before retry
+          setError(null);
+          
+          // Retry the request
+          return generateMusicForPage(pageNum, contentText, retryCount + 1);
+        }
+        
         throw new Error(errorData.details || errorData.error || `Server error: ${response.status}`);
       }
 
@@ -405,7 +427,11 @@ function BookReader() {
             audioRef.current.volume = volume;
             audioRef.current.play()
               .then(() => setIsPlaying(true))
-              .catch(e => console.error('Auto-play failed:', e));
+              .catch(e => {
+                console.error('Auto-play failed:', e);
+                // User interaction might be needed, show message
+                setError("Music playback failed. Click play to start music.");
+              });
           }
         }, 500);
       }
@@ -413,6 +439,24 @@ function BookReader() {
       return data.musicUrl;
     } catch (error) {
       console.error(`Music generation error for page ${pageNum}:`, error);
+      
+      // For network or server errors, retry once after a delay
+      if ((error.message.includes('network') || error.message.includes('timeout')) && retryCount < 2) {
+        console.log(`Network or timeout error. Retrying after delay (${retryCount + 1}/2)...`);
+        setError(`Music generation failed. Retrying in ${retryCount + 1} seconds...`);
+        
+        // Wait with exponential backoff
+        await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+        
+        // Clear error message before retry
+        setError(null);
+        
+        // Retry the request
+        return generateMusicForPage(pageNum, contentText, retryCount + 1);
+      }
+      
+      // If retries failed or other error, show error message
+      setError(`Music generation failed: ${error.message}`);
       return null;
     }
   };
@@ -580,26 +624,28 @@ function BookReader() {
   };
 
   const generateMusicForCurrentPage = async () => {
-    if (generatingMusic) return;
-    
-    // Check if we already have content
-    if (!pageContents[page] || !pageContents[page].trim()) {
-      // Try to fetch the content first
-      const content = await fetchPage(page, true);
-      if (!content || !content.trim()) {
-        setError('Cannot generate music: No content available for this page');
-        return;
-      }
+    if (!pageContents[page] || pageContents[page].trim() === '') {
+      console.warn(`No content available for page ${page}, cannot generate music`);
+      return;
     }
     
+    setLoading(true);
+    setLoadingMessage('Generating music for current page...');
+    
     try {
-      setGeneratingMusic(true);
-      await generateMusicForPage(page);
+      const url = await generateMusicForPage(page);
+      if (url) {
+        setMusicUrl(url);
+        setError(null); // Clear any previous errors on success
+      } else {
+        // If no URL but also no exception was thrown, show generic error
+        setError('Failed to generate music. Try again later.');
+      }
     } catch (error) {
-      console.error('Error generating music:', error);
-      setError(`Failed to generate music: ${error.message}`);
+      console.error('Error in generateMusicForCurrentPage:', error);
+      // Error is already displayed by the generateMusicForPage function
     } finally {
-      setGeneratingMusic(false);
+      setLoading(false);
     }
   };
 
