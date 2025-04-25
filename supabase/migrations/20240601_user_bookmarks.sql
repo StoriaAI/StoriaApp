@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS public.user_bookmarks (
     book_id TEXT NOT NULL,
     page_number INTEGER NOT NULL,
     last_paragraph TEXT,
+    selected_word TEXT,
+    selection_context TEXT,
     last_read_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()

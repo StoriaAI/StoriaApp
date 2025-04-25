@@ -41,6 +41,7 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import '../styles/Profile.css';
+import BookmarksList from '../components/BookmarksList';
 
 const ResponsiveHeading = styled(Typography)(({ theme }) => ({
   [theme.breakpoints.down('sm')]: {
@@ -423,6 +424,16 @@ function Profile() {
                 icon={<HistoryIcon />} 
                 iconPosition="start"
               />
+              <Tab 
+                label="Bookmarks" 
+                icon={<BookmarkAddedIcon />} 
+                iconPosition="start"
+              />
+              <Tab 
+                label="Notifications" 
+                icon={<NotificationsIcon />} 
+                iconPosition="start"
+              />
             </Tabs>
             
             <TabPanel value={tabValue} index={0}>
@@ -697,6 +708,18 @@ function Profile() {
                   ))}
                 </Grid>
               )}
+            </TabPanel>
+            
+            <TabPanel value={tabValue} index={2}>
+              <Fade in={tabValue === 2}>
+                <Box>
+                  <BookmarksList />
+                </Box>
+              </Fade>
+            </TabPanel>
+            
+            <TabPanel value={tabValue} index={3}>
+              {/* ... existing notifications tab content ... */}
             </TabPanel>
           </Paper>
         </Fade>

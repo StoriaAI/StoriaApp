@@ -20,6 +20,8 @@ import {
   useTheme,
   useMediaQuery,
   Stack,
+  Menu,
+  MenuItem,
   Snackbar
 } from '@mui/material';
 import VolumeDownIcon from '@mui/icons-material/VolumeDown';
@@ -32,13 +34,15 @@ import MusicNoteIcon from '@mui/icons-material/MusicNote';
 import VolumeMuteIcon from '@mui/icons-material/VolumeMute';
 import RepeatIcon from '@mui/icons-material/Repeat';
 import RepeatOneIcon from '@mui/icons-material/RepeatOne';
-import BookmarkAddIcon from '@mui/icons-material/BookmarkAdd';
-import BookmarkAddedIcon from '@mui/icons-material/BookmarkAdded';
-import { saveBookmark, getBookmark, deleteBookmark } from '../lib/supabase';
+import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase, getUserBookmarks, saveBookmark, deleteBookmark } from '../lib/supabase';
 
 function BookReader() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user, isAuthenticated } = useAuth();
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [content, setContent] = useState('');
@@ -58,10 +62,14 @@ function BookReader() {
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [pageContents, setPageContents] = useState({});
   const [loadingMessage, setLoadingMessage] = useState('Preparing your immersive reading experience...');
-  const [bookmark, setBookmark] = useState(null);
-  const [hasBookmark, setHasBookmark] = useState(false);
+  // Bookmark related states
+  const [bookmarks, setBookmarks] = useState([]);
+  const [selectedText, setSelectedText] = useState('');
+  const [selectionPosition, setSelectionPosition] = useState({ top: 0, left: 0 });
+  const [selectionMenuOpen, setSelectionMenuOpen] = useState(false);
   const [bookmarkSnackbarOpen, setBookmarkSnackbarOpen] = useState(false);
   const [bookmarkMessage, setBookmarkMessage] = useState('');
+  const contentRef = useRef(null);
   const audioRef = useRef(null);
   const nextPagesToGenerate = useRef([]);
   const MIN_PAGES_TO_LOAD = 3; // Base minimum pages to load
@@ -73,27 +81,15 @@ function BookReader() {
   // Add a specific debug flag to disable music to ensure reading works properly
   const DEBUG_DISABLE_MUSIC = true; // Set to false if you want to enable music again
 
-  // Initialize page and fetch first content
+  // Initialize page and fetch first content and load bookmarks
   useEffect(() => {
     const initialize = async () => {
       setInitialLoading(true);
       setLoadingMessage('Loading book content...');
       
       try {
-        // Try to fetch user's bookmark for this book
-        const { data: bookmarkData, error: bookmarkError } = await getBookmark(id);
-        
-        if (bookmarkData) {
-          setBookmark(bookmarkData);
-          setHasBookmark(true);
-          // Start from the bookmarked page if available
-          setPage(bookmarkData.page_number);
-          console.log(`Found bookmark for page ${bookmarkData.page_number}`);
-        }
-        
         // Fetch the first page - ensure the id is properly extracted from URL
-        const pageToFetch = bookmarkData ? bookmarkData.page_number : 0;
-        const response = await fetch(`/api/read/${id}?page=${pageToFetch}`);
+        const response = await fetch(`/api/read/${id}?page=0`);
         if (!response.ok) {
           throw new Error(`Error fetching book: ${response.status}`);
         }
@@ -109,8 +105,13 @@ function BookReader() {
         
         // Add to pageContents cache
         setPageContents({
-          [pageToFetch]: data.content
+          0: data.content
         });
+        
+        // Load user bookmarks for this book
+        if (isAuthenticated) {
+          await fetchBookmarks();
+        }
         
         if (!DEBUG_DISABLE_MUSIC) {
           // Skip music generation for testing
@@ -127,8 +128,145 @@ function BookReader() {
     };
     
     initialize();
-  }, [id]);
+  }, [id, isAuthenticated]);
 
+  // Fetch bookmarks for current user and book
+  const fetchBookmarks = async () => {
+    if (!isAuthenticated || !user) return;
+    
+    try {
+      const { data, error } = await getUserBookmarks(user.id, id);
+        
+      if (error) throw error;
+      
+      if (data) {
+        setBookmarks(data);
+      }
+    } catch (err) {
+      console.error('Error fetching bookmarks:', err);
+    }
+  };
+  
+  // Add a bookmark
+  const addBookmark = async (selectedWord, selection) => {
+    if (!isAuthenticated || !user) {
+      setBookmarkMessage('Please log in to add bookmarks');
+      setBookmarkSnackbarOpen(true);
+      return;
+    }
+    
+    try {
+      const timestamp = new Date().toISOString();
+      
+      const newBookmark = {
+        user_id: user.id,
+        book_id: id,
+        page_number: page,
+        selected_word: selectedWord,
+        selection_context: selection,
+        created_at: timestamp,
+      };
+      
+      const { data, error } = await saveBookmark(newBookmark);
+        
+      if (error) throw error;
+      
+      // Update local state
+      if (data) {
+        setBookmarks([...bookmarks, { ...newBookmark, id: data[0]?.id }]);
+        setBookmarkMessage('Bookmark added successfully');
+        setBookmarkSnackbarOpen(true);
+      }
+      
+      // Close the selection menu
+      handleSelectionMenuClose();
+    } catch (err) {
+      console.error('Error adding bookmark:', err);
+      setBookmarkMessage('Failed to add bookmark');
+      setBookmarkSnackbarOpen(true);
+    }
+  };
+  
+  // Remove a bookmark
+  const removeBookmark = async (bookmarkId) => {
+    if (!isAuthenticated || !user) return;
+    
+    try {
+      const { error } = await deleteBookmark(bookmarkId);
+        
+      if (error) throw error;
+      
+      // Update local state
+      setBookmarks(bookmarks.filter(bookmark => bookmark.id !== bookmarkId));
+      setBookmarkMessage('Bookmark removed');
+      setBookmarkSnackbarOpen(true);
+    } catch (err) {
+      console.error('Error removing bookmark:', err);
+      setBookmarkMessage('Failed to remove bookmark');
+      setBookmarkSnackbarOpen(true);
+    }
+  };
+  
+  // Handle text selection
+  const handleTextSelection = () => {
+    const selection = window.getSelection();
+    
+    if (selection.toString().trim() === '') {
+      setSelectionMenuOpen(false);
+      return;
+    }
+    
+    // Get the selected text and its position
+    const selectedText = selection.toString().trim();
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    
+    setSelectedText(selectedText);
+    setSelectionPosition({
+      top: rect.top + window.scrollY,
+      left: rect.left + window.scrollX
+    });
+    
+    setSelectionMenuOpen(true);
+  };
+  
+  // Close the selection menu
+  const handleSelectionMenuClose = () => {
+    setSelectionMenuOpen(false);
+    setSelectedText('');
+  };
+  
+  // Handle bookmark from selection
+  const handleBookmarkSelection = () => {
+    const selection = window.getSelection();
+    const selectionContext = selection.toString();
+    const selectionWord = selection.toString().trim();
+    
+    addBookmark(selectionWord, selectionContext);
+  };
+
+  // Check if the current page has a bookmark
+  const hasBookmarkOnCurrentPage = () => {
+    return bookmarks.some(bookmark => bookmark.page_number === page);
+  };
+  
+  // Get bookmark for current page
+  const getCurrentPageBookmark = () => {
+    return bookmarks.find(bookmark => bookmark.page_number === page);
+  };
+  
+  // Toggle bookmark for the current page
+  const togglePageBookmark = () => {
+    const currentBookmark = getCurrentPageBookmark();
+    
+    if (currentBookmark) {
+      removeBookmark(currentBookmark.id);
+    } else {
+      // Add a bookmark for the whole page if no text is selected
+      addBookmark("Whole page", content);
+    }
+  };
+  
   // Helper function to fetch and store a page's content
   const fetchAndStorePageContent = async (pageNum, contentStore) => {
     try {
@@ -306,34 +444,10 @@ function BookReader() {
       generateMusicForCurrentPage();
     }
     
-    // Auto-save bookmark when page changes
-    const saveCurrentBookmark = async () => {
-      if (content) {
-        try {
-          // Extract the first paragraph or snippet for context
-          const firstParagraph = content.split('\n')[0]?.substring(0, 100) || '';
-          await saveBookmark(id, page, firstParagraph);
-          setHasBookmark(true);
-          
-          // Don't show notification on auto-saves during page turns
-          // setBookmarkMessage('Reading progress saved');
-          // setBookmarkSnackbarOpen(true);
-        } catch (err) {
-          console.error('Error auto-saving bookmark:', err);
-        }
-      }
-    };
-    
-    // Save bookmark after a short delay to avoid excessive saves during rapid page turns
-    const bookmarkTimeoutId = setTimeout(saveCurrentBookmark, 2000);
-    
     // Log the current page for debugging
     console.log(`Changed to page ${page + 1} of ${totalPages}`);
     
-    return () => {
-      clearTimeout(bookmarkTimeoutId);
-    };
-  }, [page, id, content]);
+  }, [page, id]);
 
   // Effect to handle the audio element's loop property
   useEffect(() => {
@@ -726,40 +840,6 @@ function BookReader() {
     }
   };
 
-  // Bookmark functions
-  const toggleBookmark = async () => {
-    try {
-      if (hasBookmark) {
-        // Remove the bookmark
-        const { error } = await deleteBookmark(id);
-        if (error) {
-          throw error;
-        }
-        setHasBookmark(false);
-        setBookmark(null);
-        setBookmarkMessage('Bookmark removed');
-      } else {
-        // Add/update bookmark
-        const firstParagraph = content.split('\n')[0]?.substring(0, 100) || '';
-        const { data, error } = await saveBookmark(id, page, firstParagraph);
-        if (error) {
-          throw error;
-        }
-        setHasBookmark(true);
-        setBookmark(data[0]);
-        setBookmarkMessage('Bookmark saved - you can continue from this page later');
-      }
-      setBookmarkSnackbarOpen(true);
-    } catch (err) {
-      console.error('Error toggling bookmark:', err);
-      setError(`Failed to ${hasBookmark ? 'remove' : 'save'} bookmark: ${err.message}`);
-    }
-  };
-
-  const handleCloseSnackbar = () => {
-    setBookmarkSnackbarOpen(false);
-  };
-
   // Debug function - call this to log the current state
   const debugState = () => {
     console.log('Current State:', {
@@ -876,17 +956,17 @@ function BookReader() {
                 </IconButton>
               </Tooltip>
               
-              <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
-              
-              <Tooltip title={hasBookmark ? "Remove bookmark" : "Save bookmark"}>
-                <IconButton 
-                  onClick={toggleBookmark} 
-                  color={hasBookmark ? "primary" : "default"}
-                  size={isMobile ? 'small' : 'medium'}
-                >
-                  {hasBookmark ? <BookmarkAddedIcon /> : <BookmarkAddIcon />}
-                </IconButton>
-              </Tooltip>
+              {isAuthenticated && (
+                <Tooltip title={hasBookmarkOnCurrentPage() ? "Remove bookmark" : "Add bookmark"}>
+                  <IconButton 
+                    onClick={togglePageBookmark} 
+                    color="primary"
+                    size={isMobile ? 'small' : 'medium'}
+                  >
+                    {hasBookmarkOnCurrentPage() ? <BookmarkIcon /> : <BookmarkBorderIcon />}
+                  </IconButton>
+                </Tooltip>
+              )}
             </Box>
             
             {!isMobile && <Divider orientation="vertical" flexItem />}
@@ -963,27 +1043,48 @@ function BookReader() {
         <Paper sx={{ 
           p: isMobile ? 2 : 4, 
           minHeight: isMobile ? '60vh' : '70vh',
-          borderRadius: isMobile ? 1 : 2
+          borderRadius: isMobile ? 1 : 2,
+          position: 'relative'
         }}>
-          {bookmark && page === bookmark.page_number && bookmark.last_paragraph && (
-            <Alert severity="info" sx={{ mb: 2 }}>
-              <Typography variant="body2">
-                You left off here: "{bookmark.last_paragraph}..."
-              </Typography>
-            </Alert>
-          )}
-          
           <Typography 
+            ref={contentRef}
             variant="body1" 
             sx={{ 
               whiteSpace: 'pre-line',
               fontSize: `${fontSize}px`,
               lineHeight: 1.6
             }}
+            onMouseUp={handleTextSelection}
+            onTouchEnd={handleTextSelection}
           >
             {content}
           </Typography>
+          
+          {/* Selection Menu */}
+          <Menu
+            open={selectionMenuOpen}
+            onClose={handleSelectionMenuClose}
+            anchorReference="anchorPosition"
+            anchorPosition={
+              selectionPosition.top !== 0 && selectionPosition.left !== 0
+                ? { top: selectionPosition.top, left: selectionPosition.left }
+                : undefined
+            }
+          >
+            <MenuItem onClick={handleBookmarkSelection}>
+              <BookmarkIcon sx={{ mr: 1 }} fontSize="small" /> 
+              Bookmark
+            </MenuItem>
+          </Menu>
         </Paper>
+
+        {/* Bookmark success/error snackbar */}
+        <Snackbar
+          open={bookmarkSnackbarOpen}
+          autoHideDuration={3000}
+          onClose={() => setBookmarkSnackbarOpen(false)}
+          message={bookmarkMessage}
+        />
 
         {/* Hidden audio element */}
         {musicUrl && (
@@ -1089,14 +1190,6 @@ function BookReader() {
           <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
         )}
         
-        {/* Bookmark notification */}
-        <Snackbar
-          open={bookmarkSnackbarOpen}
-          autoHideDuration={4000}
-          onClose={handleCloseSnackbar}
-          message={bookmarkMessage}
-        />
-        
         {/* Debug info - only for development */}
         {process.env.NODE_ENV === 'development' && (
           <Paper sx={{ mt: 2, p: 2, opacity: 0.8 }}>
@@ -1104,12 +1197,43 @@ function BookReader() {
             <Typography variant="caption" component="div">
               Cached Pages: {Object.keys(pageContents).length} | 
               Cached Music: {Object.keys(cachedMusic).length} | 
-              Music Queue: {nextPagesToGenerate.current.length} |
-              Has Bookmark: {hasBookmark ? 'Yes' : 'No'}
+              Queue Size: {nextPagesToGenerate.current.length}
             </Typography>
           </Paper>
         )}
+        
+        {/* Loading backdrop */}
+        <Backdrop
+          sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }}
+          open={initialLoading}
+        >
+          <Box sx={{ textAlign: 'center' }}>
+            <CircularProgress color="inherit" sx={{ mb: 2 }} />
+            <Typography variant="body1">{loadingMessage}</Typography>
+            {loadingProgress > 0 && (
+              <Box sx={{ width: '250px', mt: 2 }}>
+                <LinearProgress variant="determinate" value={loadingProgress} />
+                <Typography variant="caption" sx={{ mt: 1 }}>
+                  {loadingProgress}% complete
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        </Backdrop>
       </Container>
+      
+      {/* Audio player controls bar */}
+      <AppBar 
+        position="fixed" 
+        color="default" 
+        sx={{ 
+          top: 'auto', 
+          bottom: 0,
+          boxShadow: 3
+        }}
+      >
+        {/* ... existing AppBar content ... */}
+      </AppBar>
     </Box>
   );
 }

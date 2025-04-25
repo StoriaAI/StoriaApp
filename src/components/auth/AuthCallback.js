@@ -4,6 +4,19 @@ import { supabase, handleAuthRedirect } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import Loading from '../common/Loading';
 
+// Helper function to get the appropriate redirect URL
+const getRedirectUrl = () => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  // Always use the production URL in production mode
+  if (isProduction) {
+    return 'https://joinstoria.vercel.app';
+  }
+  
+  // In development, use the current origin
+  return window.location.origin;
+};
+
 /**
  * AuthCallback component - Handles OAuth redirects and processes authentication tokens
  * 
@@ -17,7 +30,7 @@ const AuthCallback = () => {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { setUser } = useAuth();
+  const { user, setUser, isAuthenticated } = useAuth();
 
   useEffect(() => {
     const processAuthRedirect = async () => {
@@ -33,7 +46,7 @@ const AuthCallback = () => {
           setError('Authentication error: Redirected to localhost in production.');
           
           // Attempt to redirect to the correct production URL
-          const productionUrl = 'https://joinstoria.vercel.app';
+          const productionUrl = getRedirectUrl();
           setStatus(`Redirecting to ${productionUrl}...`);
           
           // Preserve the hash fragment with auth tokens
@@ -61,11 +74,50 @@ const AuthCallback = () => {
         }
 
         // Process the auth redirect and extract session
-        const { data, error } = handleAuthRedirect();
+        console.log('Processing auth tokens from hash:', location.hash);
+        try {
+          // Use supabase directly to process the session from URL
+          const { data, error: sessionError } = await supabase.auth.getSessionFromUrl();
+          
+          if (sessionError) {
+            console.error('Error processing session from URL:', sessionError);
+            throw sessionError;
+          }
+          
+          console.log('Session data from URL:', data);
+          
+          if (data?.session) {
+            console.log('Successfully processed session from URL');
+            setStatus('Authentication successful!');
+            
+            // Set user in context
+            setUser(data.session.user);
+            
+            // Redirect to home page
+            const homeUrl = getRedirectUrl() + '/';
+            setStatus(`Redirecting to ${homeUrl}...`);
+            
+            // Clean URL and redirect
+            window.history.replaceState({}, document.title, window.location.pathname);
+            
+            // Use a short delay to ensure everything is processed
+            setTimeout(() => {
+              // Use window.location for a full page reload to ensure everything is fresh
+              window.location.href = homeUrl;
+            }, 1000);
+            return;
+          }
+        } catch (sessionErr) {
+          console.error('Error getting session from URL:', sessionErr);
+          // Fall through to try backup method
+        }
         
-        if (error) {
-          console.error('Error processing authentication:', error);
-          setError(`Authentication error: ${error.message || 'Unknown error'}`);
+        // Backup method - use handleAuthRedirect and get session afterward
+        const { data, error: redirectError } = handleAuthRedirect();
+        
+        if (redirectError) {
+          console.error('Error processing authentication:', redirectError);
+          setError(`Authentication error: ${redirectError.message || 'Unknown error'}`);
           setStatus('Redirecting to login...');
           setTimeout(() => navigate('/login'), 2000);
           return;
@@ -82,10 +134,16 @@ const AuthCallback = () => {
           setUser(sessionData.session.user);
           
           // Determine where to redirect the user
-          setStatus('Redirecting to dashboard...');
+          setStatus('Redirecting to home page...');
           
-          // Redirect to dashboard or the page they were trying to access
-          setTimeout(() => navigate('/dashboard'), 500);
+          // Redirect to home page
+          const homeUrl = getRedirectUrl() + '/';
+          
+          // Use a short delay to ensure everything is processed
+          setTimeout(() => {
+            // Use window.location for a full page reload to ensure everything is fresh
+            window.location.href = homeUrl;
+          }, 1000);
         } else {
           // This shouldn't happen if we have a valid token, but just in case
           setError('Failed to retrieve user session');

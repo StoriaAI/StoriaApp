@@ -48,6 +48,12 @@ const getSiteUrl = () => {
   return window.location.origin;
 };
 
+// Helper function to get the appropriate redirect URL (for consistency with other files)
+export const getRedirectUrl = () => {
+  // Use the same logic as getSiteUrl for consistency
+  return getSiteUrl();
+};
+
 debugLog('Environment:', isProduction ? 'Production' : 'Development');
 debugLog('Site URL:', getSiteUrl());
 
@@ -459,139 +465,56 @@ export const setupOAuth = () => {
   });
 };
 
-// Call the setup function
-if (typeof window !== 'undefined') {
-  setupOAuth();
-}
-
-// Bookmark helper functions
-export const saveBookmark = async (bookId, pageNumber, lastParagraph = '') => {
+// Bookmark related functions
+export const saveBookmark = async (bookmarkData) => {
   try {
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (userError || !user) {
-      console.error('User not authenticated:', userError?.message);
-      return { data: null, error: userError || new Error('User not authenticated') };
-    }
-    
-    debugLog('Saving bookmark for user:', user.id, 'book:', bookId, 'page:', pageNumber);
-    
-    // Check if bookmark already exists
-    const { data: existingBookmark, error: checkError } = await supabase
-      .from('user_bookmarks')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('book_id', bookId)
-      .single();
-    
-    // Prepare bookmark data
-    const bookmarkData = {
-      user_id: user.id,
-      book_id: bookId,
-      page_number: pageNumber,
-      last_paragraph: lastParagraph || '',
-      last_read_at: new Date().toISOString()
-    };
-    
-    if (existingBookmark) {
-      // Update existing bookmark
-      debugLog('Updating existing bookmark for book:', bookId);
-      const { data, error } = await supabase
-        .from('user_bookmarks')
-        .update(bookmarkData)
-        .eq('id', existingBookmark.id)
-        .select();
-      
-      if (error) {
-        debugLog('Error updating bookmark:', error.message);
-      } else {
-        debugLog('Bookmark updated successfully');
-      }
-      
-      return { data, error };
-    } else {
-      // Create new bookmark
-      debugLog('Creating new bookmark for book:', bookId);
-      bookmarkData.created_at = new Date().toISOString();
-      
-      const { data, error } = await supabase
-        .from('user_bookmarks')
-        .insert(bookmarkData)
-        .select();
-      
-      if (error) {
-        debugLog('Error creating bookmark:', error.message);
-      } else {
-        debugLog('Bookmark created successfully');
-      }
-      
-      return { data, error };
-    }
-  } catch (err) {
-    console.error('Exception saving bookmark:', err);
-    return { data: null, error: err };
-  }
-};
-
-export const getBookmark = async (bookId) => {
-  try {
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (userError || !user) {
-      console.error('User not authenticated:', userError?.message);
-      return { data: null, error: userError || new Error('User not authenticated') };
-    }
-    
-    debugLog('Getting bookmark for user:', user.id, 'book:', bookId);
-    
     const { data, error } = await supabase
       .from('user_bookmarks')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('book_id', bookId)
-      .single();
-    
-    if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found" error
-      debugLog('Error getting bookmark:', error.message);
-    } else if (data) {
-      debugLog('Bookmark found:', data.page_number);
-    } else {
-      debugLog('No bookmark found for this book');
-    }
-    
-    return { data, error: error?.code === 'PGRST116' ? null : error };
+      .insert([bookmarkData]);
+      
+    return { data, error };
   } catch (err) {
-    console.error('Exception getting bookmark:', err);
+    console.error('Error saving bookmark:', err);
     return { data: null, error: err };
   }
 };
 
-export const deleteBookmark = async (bookId) => {
+export const getUserBookmarks = async (userId, bookId = null) => {
   try {
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (userError || !user) {
-      console.error('User not authenticated:', userError?.message);
-      return { error: userError || new Error('User not authenticated') };
+    let query = supabase
+      .from('user_bookmarks')
+      .select('*')
+      .eq('user_id', userId);
+      
+    // Filter by book ID if provided
+    if (bookId) {
+      query = query.eq('book_id', bookId);
     }
     
-    debugLog('Deleting bookmark for user:', user.id, 'book:', bookId);
+    const { data, error } = await query;
     
+    return { data, error };
+  } catch (err) {
+    console.error('Error getting bookmarks:', err);
+    return { data: null, error: err };
+  }
+};
+
+export const deleteBookmark = async (bookmarkId) => {
+  try {
     const { error } = await supabase
       .from('user_bookmarks')
       .delete()
-      .eq('user_id', user.id)
-      .eq('book_id', bookId);
-    
-    if (error) {
-      debugLog('Error deleting bookmark:', error.message);
-    } else {
-      debugLog('Bookmark deleted successfully');
-    }
-    
+      .eq('id', bookmarkId);
+      
     return { error };
   } catch (err) {
-    console.error('Exception deleting bookmark:', err);
+    console.error('Error deleting bookmark:', err);
     return { error: err };
   }
-}; 
+};
+
+// Call the setup function
+if (typeof window !== 'undefined') {
+  setupOAuth();
+} 

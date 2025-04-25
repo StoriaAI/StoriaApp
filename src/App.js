@@ -140,6 +140,7 @@ const LoadingScreen = () => (
 // Component to handle OAuth redirects
 const HandleOAuthRedirect = () => {
   const location = useLocation();
+  const { setUser } = useAuth();
   
   useEffect(() => {
     // CRITICAL: Check if we're mistakenly on localhost in production
@@ -168,40 +169,47 @@ const HandleOAuthRedirect = () => {
       }
     }
   
-    // Check if there's a hash in the URL (common for OAuth redirects)
-    if (location.hash || location.search) {
-      console.log('Detected potential auth redirect in HandleOAuthRedirect component');
-      
-      // Run our new OAuth debug helper
-      debugOAuthRedirects();
-      
-      // Try to fix common OAuth issues
-      fixOAuthRedirectIssues().then(result => {
-        if (result.success) {
-          console.log('Successfully fixed OAuth redirect in HandleOAuthRedirect component!');
-          return;
-        }
+    // Only handle redirects if we're not already on an auth callback route
+    // This prevents double-handling of auth callbacks
+    if (location.pathname !== '/auth/callback' && location.pathname !== '/auth/v2/callback') {
+      // Check if there's a hash in the URL (common for OAuth redirects)
+      if (location.hash || location.search) {
+        console.log('Detected potential auth redirect in HandleOAuthRedirect component');
         
-        // If the new utility didn't fix it, try the original debug helper as fallback
-        debugAuth().then(() => {
-          console.log('Debug complete. Attempting to handle hash redirect...');
+        // Run our new OAuth debug helper
+        debugOAuthRedirects();
+        
+        // Try to fix common OAuth issues
+        fixOAuthRedirectIssues().then(result => {
+          if (result.success) {
+            console.log('Successfully fixed OAuth redirect in HandleOAuthRedirect component!');
+            return;
+          }
           
-          // Explicitly handle the hash redirect
-          handleHashRedirect().then(({ data, error }) => {
-            if (error) {
-              console.error('Failed to handle hash redirect:', error);
-            } else if (data) {
-              console.log('Successfully handled hash redirect in HandleOAuthRedirect component!');
-              
-              // Clear the URL
-              window.history.replaceState(null, '', window.location.pathname);
-            }
+          // If the new utility didn't fix it, try the original debug helper as fallback
+          debugAuth().then(() => {
+            console.log('Debug complete. Attempting to handle hash redirect...');
+            
+            // Explicitly handle the hash redirect
+            handleHashRedirect().then(({ data, error }) => {
+              if (error) {
+                console.error('Failed to handle hash redirect:', error);
+              } else if (data) {
+                console.log('Successfully handled hash redirect in HandleOAuthRedirect component!');
+                
+                if (data.session && data.session.user) {
+                  // Update user state in auth context
+                  setUser(data.session.user);
+                }
+              }
+            });
           });
         });
-      });
+      }
     }
-  }, [location]);
-  
+  }, [location, setUser]);
+
+  // This component doesn't render anything
   return null;
 };
 
@@ -249,6 +257,12 @@ const AppContent = () => {
       <Navbar />
       <Box sx={{ flex: 1 }}>
         <Routes>
+          {/* Auth Routes - Place these first to ensure they are prioritized */}
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/auth/v2/callback" element={<AuthCallback />} />
+          <Route path="/auth/status" element={<AuthStatus />} />
+        
+          {/* Public Routes */}
           <Route path="/" element={<Home />} />
           <Route 
             path="/login" 
@@ -266,10 +280,6 @@ const AppContent = () => {
               </PublicRoute>
             } 
           />
-          {/* Auth Routes */}
-          <Route path="/auth/callback" element={<AuthCallback />} />
-          <Route path="/auth/v2/callback" element={<AuthCallback />} />
-          <Route path="/auth/status" element={<AuthStatus />} />
           
           {/* Book Routes - Order matters: more specific routes first */}
           <Route path="/book/read/:id" element={<BookReader />} />

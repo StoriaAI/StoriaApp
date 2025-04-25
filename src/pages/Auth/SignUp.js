@@ -14,7 +14,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
-import { signUp, signInWithGoogle, PRODUCTION_URL } from '../../lib/supabase';
+import { signUp, signInWithGoogle, PRODUCTION_URL, getRedirectUrl, supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import GoogleIcon from '@mui/icons-material/Google';
 import { debugOAuthRedirects, fixOAuthRedirectIssues } from '../../util/debugOAuth';
@@ -31,7 +31,7 @@ const SignUp = () => {
   const [signInError, setSignInError] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, isAuthenticated, signup, signInWithGoogle } = useAuth();
+  const { user, isAuthenticated, setUser, signInWithGoogle } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -42,8 +42,8 @@ const SignUp = () => {
     
     // If we detect we're on localhost in production, force redirect
     if (isProduction && isLocalhost) {
-      console.log('🚨 SignUp component detected localhost in production, redirecting to:', PRODUCTION_URL);
-      window.location.replace(PRODUCTION_URL); // Use replace instead of href for cleaner history
+      console.log('🚨 SignUp component detected localhost in production, redirecting to:', getRedirectUrl());
+      window.location.replace(getRedirectUrl()); // Use replace instead of href for cleaner history
       return; // Exit early, no need to continue
     }
     
@@ -102,13 +102,37 @@ const SignUp = () => {
       setLoading(true);
       setError('');
       
-      const { data, error: signUpError } = await signUp(email, password);
+      // Use Supabase's auth directly
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          // Use explicit redirect URL to ensure proper redirect after email confirmation (if enabled)
+          emailRedirectTo: getRedirectUrl()
+        }
+      });
       
       if (signUpError) throw signUpError;
       
-      if (data) {
-        // Success - onboarding will be shown automatically
-        navigate('/');
+      if (data?.user) {
+        console.log('Signup successful', data.user);
+        
+        // Update auth context
+        setUser(data.user);
+        
+        // Success - redirect to home page
+        if (data.session) {
+          // If we have a session, user can log in immediately
+          window.location.href = getRedirectUrl();
+        } else {
+          // If email confirmation is required, show message and go to login
+          setError('Please check your email to confirm your account before logging in.');
+          setTimeout(() => {
+            navigate('/login');
+          }, 3000);
+        }
+      } else {
+        throw new Error('Signup failed - no user data returned');
       }
     } catch (err) {
       console.error('Signup error:', err);
