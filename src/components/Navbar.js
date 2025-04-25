@@ -31,7 +31,8 @@ import {
   AccountCircle,
   Login,
   Logout,
-  PersonAdd
+  PersonAdd,
+  Whatshot
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { signOut } from '../lib/supabase';
@@ -126,6 +127,7 @@ function Navbar() {
 
   const navItems = [
     { name: 'Home', path: '/' },
+    { name: 'Trending', path: '/trending' },
     { name: 'About', path: '/about' },
     { name: 'Pricing', path: '/pricing' },
     { name: 'Contact', path: '/contact' }
@@ -162,6 +164,10 @@ function Navbar() {
           <ListItem button component={RouterLink} to="/" onClick={toggleDrawer(false)}>
             <ListItemIcon><HomeIcon fontSize="small" /></ListItemIcon>
             <ListItemText primary="Home" />
+          </ListItem>
+          <ListItem button component={RouterLink} to="/trending" onClick={toggleDrawer(false)}>
+            <ListItemIcon><Whatshot fontSize="small" /></ListItemIcon>
+            <ListItemText primary="Trending" />
           </ListItem>
           <ListItem button component={RouterLink} to="/pricing" onClick={toggleDrawer(false)}>
             <ListItemIcon><Info fontSize="small" /></ListItemIcon>

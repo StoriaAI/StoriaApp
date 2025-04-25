@@ -100,22 +100,9 @@ function Search() {
         
         let response = await fetch(apiUrl);
         
-        // If we get an HTML response (error) and we're in development, try using localhost API
-        if (!response.ok || response.headers.get('content-type')?.includes('text/html')) {
-          console.warn('First API attempt failed, trying absolute URL');
-          
-          const baseUrl = window.location.hostname === 'localhost' ? 
-            'http://localhost:3000' : // Use port 3000 for the Express server
-            window.location.origin;
-            
-          apiUrl = `${baseUrl}/api/books?search=${encodeURIComponent(query)}&page=${page}`;
-          console.log(`Retrying with: ${apiUrl}`);
-          
-          response = await fetch(apiUrl);
-          
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
+        // Check if response is ok
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
         
         // Check content type to ensure it's JSON
@@ -153,7 +140,7 @@ function Search() {
   const handleSearch = (e) => {
     e.preventDefault();
     if (searchTerm.trim()) {
-      navigate(`/search?query=${encodeURIComponent(searchTerm)}`);
+      navigate(`/search?query=${encodeURIComponent(searchTerm.trim())}`);
     }
   };
   

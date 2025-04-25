@@ -82,6 +82,18 @@ module.exports = async (req, res) => {
           textUrl = `/api/read/${book.id}`;
         }
         
+        // Find EPUB format if available
+        let epubUrl = null;
+        if (book.formats['application/epub+zip']) {
+          epubUrl = book.formats['application/epub+zip'];
+        }
+        
+        // Find Kindle format if available
+        let kindleUrl = null;
+        if (book.formats['application/x-mobipocket-ebook']) {
+          kindleUrl = book.formats['application/x-mobipocket-ebook'];
+        }
+        
         // Find the best available image format
         let imageUrl = null;
         const imageFormats = [
@@ -107,14 +119,16 @@ module.exports = async (req, res) => {
           ? book.authors[0].name 
           : 'Unknown Author';
         
-        // Return simplified book object
+        // Return simplified book object with additional formats
         return {
           id: book.id,
           title: book.title,
           authors: book.authors,
           formats: {
             'image/jpeg': imageUrl,
-            'text/plain': textUrl
+            'text/plain': textUrl,
+            'epub': epubUrl,
+            'kindle': kindleUrl
           },
           download_count: book.download_count || 0,
           languages: book.languages || ['en']

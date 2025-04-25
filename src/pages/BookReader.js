@@ -72,7 +72,7 @@ function BookReader() {
       setLoadingMessage('Loading book content...');
       
       try {
-        // Fetch the first page
+        // Fetch the first page - ensure the id is properly extracted from URL
         const response = await fetch(`/api/read/${id}?page=0`);
         if (!response.ok) {
           throw new Error(`Error fetching book: ${response.status}`);

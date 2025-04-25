@@ -6,6 +6,7 @@ import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Home from './pages/Home';
 import BookReader from './pages/BookReader';
+import BookDetail from './pages/BookDetail';
 import Login from './pages/Auth/Login';
 import SignUp from './pages/Auth/SignUp';
 import About from './pages/About';
@@ -13,6 +14,7 @@ import Contact from './pages/Contact';
 import Profile from './pages/Profile';
 import ProfilePage from './pages/ProfilePage';
 import Search from './pages/Search';
+import Trending from './pages/Trending';
 import Pricing from './pages/Pricing';
 import Settings from './pages/Settings';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -269,12 +271,14 @@ const AppContent = () => {
           <Route path="/auth/v2/callback" element={<AuthCallback />} />
           <Route path="/auth/status" element={<AuthStatus />} />
           
-          {/* Make Book Reader available without authentication */}
-          <Route path="/book/:id" element={<BookReader />} />
+          {/* Book Routes - Order matters: more specific routes first */}
+          <Route path="/book/read/:id" element={<BookReader />} />
+          <Route path="/book/:id" element={<BookDetail />} />
           
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/pricing" element={<Pricing />} />
+          <Route path="/trending" element={<Trending />} />
           <Route 
             path="/profile" 
             element={

@@ -16,10 +16,13 @@ import {
   styled,
   useTheme,
   useMediaQuery,
+  Paper,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import FallbackLibrary from '../components/FallbackLibrary';
 import '../styles/Home.css';
+import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 
 // Styled Components
 const SectionHeading = styled(Typography)(({ theme }) => ({
@@ -175,7 +178,7 @@ function Home() {
   const handleSearch = (e) => {
     e.preventDefault();
     if (search.trim()) {
-      navigate(`/search?query=${encodeURIComponent(search)}`);
+      navigate(`/search?query=${encodeURIComponent(search.trim())}`);
     }
   };
   
@@ -215,6 +218,63 @@ function Home() {
           />
         </Box>
       </Box>
+
+      {/* Trending Banner */}
+      <Paper 
+        elevation={0} 
+        sx={{
+          p: 3,
+          mb: 5,
+          borderRadius: 2,
+          background: 'linear-gradient(to right, rgba(15,15,25,0.95), rgba(25,25,40,0.95))',
+          position: 'relative',
+          overflow: 'hidden',
+          boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.1)',
+        }}
+      >
+        <Box 
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: { xs: 'wrap', sm: 'nowrap' },
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: { xs: 2, sm: 0 } }}>
+            <LocalFireDepartmentIcon color="error" fontSize="large" sx={{ mr: 2 }} />
+            <Box>
+              <Typography 
+                variant="h5" 
+                component="h2" 
+                sx={{ fontWeight: 600 }}
+              >
+                Trending Books
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Explore the most popular books across different genres. Discover what others are reading right now.
+              </Typography>
+            </Box>
+          </Box>
+          <Button 
+            variant="outlined" 
+            onClick={() => navigate('/trending')}
+            endIcon={<ArrowForwardIcon />}
+            sx={{ 
+              borderRadius: 8,
+              px: 3,
+              py: 1,
+              borderColor: 'rgba(255,255,255,0.15)', 
+              color: 'primary.main',
+              '&:hover': {
+                borderColor: 'primary.main',
+                backgroundColor: 'rgba(244, 228, 188, 0.05)',
+              }
+            }}
+          >
+            View Trending
+          </Button>
+        </Box>
+      </Paper>
 
       {/* Book Categories */}
       {bookCategories.map((category) => (
