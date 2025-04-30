@@ -19,7 +19,10 @@ import {
   Backdrop,
   useTheme,
   useMediaQuery,
-  Stack
+  Stack,
+  Menu,
+  MenuItem,
+  Snackbar
 } from '@mui/material';
 import VolumeDownIcon from '@mui/icons-material/VolumeDown';
 import VolumeUpIcon from '@mui/icons-material/VolumeUp';
@@ -31,10 +34,15 @@ import MusicNoteIcon from '@mui/icons-material/MusicNote';
 import VolumeMuteIcon from '@mui/icons-material/VolumeMute';
 import RepeatIcon from '@mui/icons-material/Repeat';
 import RepeatOneIcon from '@mui/icons-material/RepeatOne';
+import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase, getUserBookmarks, saveBookmark, deleteBookmark } from '../lib/supabase';
 
 function BookReader() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user, isAuthenticated } = useAuth();
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [content, setContent] = useState('');
@@ -54,6 +62,14 @@ function BookReader() {
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [pageContents, setPageContents] = useState({});
   const [loadingMessage, setLoadingMessage] = useState('Preparing your immersive reading experience...');
+  // Bookmark related states
+  const [bookmarks, setBookmarks] = useState([]);
+  const [selectedText, setSelectedText] = useState('');
+  const [selectionPosition, setSelectionPosition] = useState({ top: 0, left: 0 });
+  const [selectionMenuOpen, setSelectionMenuOpen] = useState(false);
+  const [bookmarkSnackbarOpen, setBookmarkSnackbarOpen] = useState(false);
+  const [bookmarkMessage, setBookmarkMessage] = useState('');
+  const contentRef = useRef(null);
   const audioRef = useRef(null);
   const nextPagesToGenerate = useRef([]);
   const MIN_PAGES_TO_LOAD = 3; // Base minimum pages to load
@@ -62,14 +78,17 @@ function BookReader() {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
 
-  // Initial load - fetch first few pages and start music generation
+  // Add a specific debug flag to disable music to ensure reading works properly
+  const DEBUG_DISABLE_MUSIC = true; // Set to false if you want to enable music again
+
+  // Initialize page and fetch first content and load bookmarks
   useEffect(() => {
     const initialize = async () => {
       setInitialLoading(true);
       setLoadingMessage('Loading book content...');
       
       try {
-        // First, fetch basic book information to get total pages
+        // Fetch the first page - ensure the id is properly extracted from URL
         const response = await fetch(`/api/read/${id}?page=0`);
         if (!response.ok) {
           throw new Error(`Error fetching book: ${response.status}`);
@@ -80,56 +99,174 @@ function BookReader() {
           throw new Error('Invalid content received from the server');
         }
         
-        // Set the content directly instead of relying on state updates
-        const firstPageContent = data.content;
+        // Set the important book info
+        setContent(data.content);
         setTotalPages(data.totalPages);
         
-        // Update states synchronously for the first page
-        setContent(firstPageContent);
-        // Create a new object to avoid state update issues
-        const initialPageContents = { [0]: firstPageContent };
-        setPageContents(initialPageContents);
+        // Add to pageContents cache
+        setPageContents({
+          0: data.content
+        });
         
-        // Pre-fetch content for the first buffer of pages
-        setLoadingMessage('Pre-fetching initial pages...');
-        const totalPagesToBuffer = Math.min(MIN_PAGES_TO_LOAD, data.totalPages);
-        
-        // Fetch content for initial buffer (we already have page 0)
-        const contentPromises = [];
-        for (let i = 1; i < totalPagesToBuffer; i++) {
-          contentPromises.push(fetchAndStorePageContent(i, initialPageContents));
+        // Load user bookmarks for this book
+        if (isAuthenticated) {
+          await fetchBookmarks();
         }
         
-        await Promise.all(contentPromises);
-        
-        // Now initialPageContents contains all fetched pages
-        setPageContents({ ...initialPageContents });
-        
-        // Now that we have content, generate music for the first buffer of pages
-        setLoadingMessage('Generating initial ambient music...');
-        await generateMusicForInitialBuffer(initialPageContents, totalPagesToBuffer);
-        
-        // Queue up the next buffer of pages
-        queueNextBuffer(totalPagesToBuffer);
+        if (!DEBUG_DISABLE_MUSIC) {
+          // Skip music generation for testing
+          setLoadingMessage('Generating ambient music...');
+          await generateMusicForCurrentPage();
+        }
         
       } catch (err) {
         console.error('Initialization error:', err);
         setError(`Failed to initialize: ${err.message}`);
       } finally {
-        // Final safety check - ensure we have content before removing loading screen
-        if (!content) {
-          const pageZeroContent = pageContents[0];
-          if (pageZeroContent && typeof pageZeroContent === 'string') {
-            setContent(pageZeroContent);
-          }
-        }
         setInitialLoading(false);
       }
     };
     
     initialize();
-  }, [id]);
+  }, [id, isAuthenticated]);
 
+  // Fetch bookmarks for current user and book
+  const fetchBookmarks = async () => {
+    if (!isAuthenticated || !user) return;
+    
+    try {
+      const { data, error } = await getUserBookmarks(user.id, id);
+        
+      if (error) throw error;
+      
+      if (data) {
+        setBookmarks(data);
+      }
+    } catch (err) {
+      console.error('Error fetching bookmarks:', err);
+    }
+  };
+  
+  // Add a bookmark
+  const addBookmark = async (selectedWord, selection) => {
+    if (!isAuthenticated || !user) {
+      setBookmarkMessage('Please log in to add bookmarks');
+      setBookmarkSnackbarOpen(true);
+      return;
+    }
+    
+    try {
+      const timestamp = new Date().toISOString();
+      
+      const newBookmark = {
+        user_id: user.id,
+        book_id: id,
+        page_number: page,
+        selected_word: selectedWord,
+        selection_context: selection,
+        created_at: timestamp,
+      };
+      
+      const { data, error } = await saveBookmark(newBookmark);
+        
+      if (error) throw error;
+      
+      // Update local state
+      if (data) {
+        setBookmarks([...bookmarks, { ...newBookmark, id: data[0]?.id }]);
+        setBookmarkMessage('Bookmark added successfully');
+        setBookmarkSnackbarOpen(true);
+      }
+      
+      // Close the selection menu
+      handleSelectionMenuClose();
+    } catch (err) {
+      console.error('Error adding bookmark:', err);
+      setBookmarkMessage('Failed to add bookmark');
+      setBookmarkSnackbarOpen(true);
+    }
+  };
+  
+  // Remove a bookmark
+  const removeBookmark = async (bookmarkId) => {
+    if (!isAuthenticated || !user) return;
+    
+    try {
+      const { error } = await deleteBookmark(bookmarkId);
+        
+      if (error) throw error;
+      
+      // Update local state
+      setBookmarks(bookmarks.filter(bookmark => bookmark.id !== bookmarkId));
+      setBookmarkMessage('Bookmark removed');
+      setBookmarkSnackbarOpen(true);
+    } catch (err) {
+      console.error('Error removing bookmark:', err);
+      setBookmarkMessage('Failed to remove bookmark');
+      setBookmarkSnackbarOpen(true);
+    }
+  };
+  
+  // Handle text selection
+  const handleTextSelection = () => {
+    const selection = window.getSelection();
+    
+    if (selection.toString().trim() === '') {
+      setSelectionMenuOpen(false);
+      return;
+    }
+    
+    // Get the selected text and its position
+    const selectedText = selection.toString().trim();
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    
+    setSelectedText(selectedText);
+    setSelectionPosition({
+      top: rect.top + window.scrollY,
+      left: rect.left + window.scrollX
+    });
+    
+    setSelectionMenuOpen(true);
+  };
+  
+  // Close the selection menu
+  const handleSelectionMenuClose = () => {
+    setSelectionMenuOpen(false);
+    setSelectedText('');
+  };
+  
+  // Handle bookmark from selection
+  const handleBookmarkSelection = () => {
+    const selection = window.getSelection();
+    const selectionContext = selection.toString();
+    const selectionWord = selection.toString().trim();
+    
+    addBookmark(selectionWord, selectionContext);
+  };
+
+  // Check if the current page has a bookmark
+  const hasBookmarkOnCurrentPage = () => {
+    return bookmarks.some(bookmark => bookmark.page_number === page);
+  };
+  
+  // Get bookmark for current page
+  const getCurrentPageBookmark = () => {
+    return bookmarks.find(bookmark => bookmark.page_number === page);
+  };
+  
+  // Toggle bookmark for the current page
+  const togglePageBookmark = () => {
+    const currentBookmark = getCurrentPageBookmark();
+    
+    if (currentBookmark) {
+      removeBookmark(currentBookmark.id);
+    } else {
+      // Add a bookmark for the whole page if no text is selected
+      addBookmark("Whole page", content);
+    }
+  };
+  
   // Helper function to fetch and store a page's content
   const fetchAndStorePageContent = async (pageNum, contentStore) => {
     try {
@@ -259,70 +396,58 @@ function BookReader() {
     }
   };
 
-  // Monitor page changes to maintain music playback and buffer management
+  // Monitor page changes to maintain book reading flow
   useEffect(() => {
     // Set the content from our cached page contents
     if (pageContents[page]) {
       setContent(pageContents[page]);
+      setLoading(false);
     } else {
       // If we don't have the content cached, fetch it
       setLoading(true);
-      fetchPage(page, true).then(pageContent => {
-        if (pageContent) {
-          setContent(pageContent);
-        }
-        setLoading(false);
-      }).catch(err => {
-        console.error(`Error loading page ${page}:`, err);
-        setError(`Failed to load page ${page + 1}`);
-        setLoading(false);
-      });
+      
+      fetch(`/api/read/${id}?page=${page}`)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`Error: ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          if (data.content) {
+            setContent(data.content);
+            
+            // Update page cache
+            setPageContents(prev => ({
+              ...prev,
+              [page]: data.content
+            }));
+            
+            // Update total pages if needed
+            if (data.totalPages && data.totalPages !== totalPages) {
+              setTotalPages(data.totalPages);
+            }
+          } else {
+            throw new Error('No content received from server');
+          }
+          setLoading(false);
+        })
+        .catch(err => {
+          console.error(`Error loading page ${page}:`, err);
+          setError(`Failed to load page ${page + 1}: ${err.message}`);
+          setLoading(false);
+        });
     }
     
-    // When page changes, check if we have cached music for this page
-    if (cachedMusic[page]) {
-      console.log(`Using cached music for page ${page}`);
-      
-      // Stop current audio if playing
-      if (audioRef.current && isPlaying) {
-        audioRef.current.pause();
-      }
-      
-      // Set the music URL for the current page
-      setMusicUrl(cachedMusic[page]);
-      
-      // Auto-play the cached music
-      setTimeout(() => {
-        if (audioRef.current) {
-          audioRef.current.volume = volume;
-          audioRef.current.play()
-            .then(() => setIsPlaying(true))
-            .catch(e => console.error('Auto-play failed:', e));
-        }
-      }, 500);
-    } else {
-      // If no cached music, generate it only if we have content
-      if (pageContents[page] && pageContents[page].trim()) {
-        // Pause any currently playing music before generating new music
-        if (audioRef.current && isPlaying) {
-          audioRef.current.pause();
-          setIsPlaying(false);
-        }
-        
-        // Clear the current music URL to avoid playing the wrong music
-        setMusicUrl(null);
-        
-        // Generate music for this page
-        generateMusicForCurrentPage();
-      }
+    // Only generate music if it's enabled
+    if (!DEBUG_DISABLE_MUSIC && !cachedMusic[page] && !generatingMusic) {
+      generateMusicForCurrentPage();
     }
     
-    // Always check and update the buffer when page changes
-    checkAndQueueNextBuffer();
+    // Log the current page for debugging
+    console.log(`Changed to page ${page + 1} of ${totalPages}`);
     
-    // Debug log the current music cache status
-    console.log(`Page changed to ${page}. Music cached for pages: ${Object.keys(cachedMusic).sort((a, b) => a - b).join(', ')}`);
-  }, [page]);
+  }, [page, id]);
 
   // Effect to handle the audio element's loop property
   useEffect(() => {
@@ -830,6 +955,18 @@ function BookReader() {
                   <ZoomInIcon />
                 </IconButton>
               </Tooltip>
+              
+              {isAuthenticated && (
+                <Tooltip title={hasBookmarkOnCurrentPage() ? "Remove bookmark" : "Add bookmark"}>
+                  <IconButton 
+                    onClick={togglePageBookmark} 
+                    color="primary"
+                    size={isMobile ? 'small' : 'medium'}
+                  >
+                    {hasBookmarkOnCurrentPage() ? <BookmarkIcon /> : <BookmarkBorderIcon />}
+                  </IconButton>
+                </Tooltip>
+              )}
             </Box>
             
             {!isMobile && <Divider orientation="vertical" flexItem />}
@@ -906,19 +1043,48 @@ function BookReader() {
         <Paper sx={{ 
           p: isMobile ? 2 : 4, 
           minHeight: isMobile ? '60vh' : '70vh',
-          borderRadius: isMobile ? 1 : 2
+          borderRadius: isMobile ? 1 : 2,
+          position: 'relative'
         }}>
           <Typography 
+            ref={contentRef}
             variant="body1" 
             sx={{ 
               whiteSpace: 'pre-line',
               fontSize: `${fontSize}px`,
               lineHeight: 1.6
             }}
+            onMouseUp={handleTextSelection}
+            onTouchEnd={handleTextSelection}
           >
             {content}
           </Typography>
+          
+          {/* Selection Menu */}
+          <Menu
+            open={selectionMenuOpen}
+            onClose={handleSelectionMenuClose}
+            anchorReference="anchorPosition"
+            anchorPosition={
+              selectionPosition.top !== 0 && selectionPosition.left !== 0
+                ? { top: selectionPosition.top, left: selectionPosition.left }
+                : undefined
+            }
+          >
+            <MenuItem onClick={handleBookmarkSelection}>
+              <BookmarkIcon sx={{ mr: 1 }} fontSize="small" /> 
+              Bookmark
+            </MenuItem>
+          </Menu>
         </Paper>
+
+        {/* Bookmark success/error snackbar */}
+        <Snackbar
+          open={bookmarkSnackbarOpen}
+          autoHideDuration={3000}
+          onClose={() => setBookmarkSnackbarOpen(false)}
+          message={bookmarkMessage}
+        />
 
         {/* Hidden audio element */}
         {musicUrl && (

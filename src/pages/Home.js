@@ -16,10 +16,13 @@ import {
   styled,
   useTheme,
   useMediaQuery,
+  Paper,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import FallbackLibrary from '../components/FallbackLibrary';
 import '../styles/Home.css';
+import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 
 // Styled Components
 const SectionHeading = styled(Typography)(({ theme }) => ({
@@ -97,21 +100,14 @@ const CategorySection = styled(Box)(({ theme }) => ({
   marginBottom: theme.spacing(6),
 }));
 
-// Book categories from reference image
+// Update book categories to simpler ones that work reliably with Gutenberg
 const bookCategories = [
-  'Latest Summaries',
-  'Trending Books',
-  'Top 100 Non-Fiction Books of All Time',
-  'Top 100 Fiction Books of All Time',
-  'Best Psychology Books',
-  'Best Technology Books',
-  'Deep Mental Health Books',
-  'Best Nonfiction Books',
-  'Best Business Books',
-  'Best Motivational Books',
-  'Best Relationship Books',
-  'Best Design Books',
-  'Best Food Books'
+  'Fiction',
+  'Adventure',
+  'Mystery',
+  'Science',
+  'History',
+  'Philosophy'
 ];
 
 function Home() {
@@ -120,45 +116,27 @@ function Home() {
   const [loading, setLoading] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState({});
   const [error, setError] = useState(null);
-  const [page, setPage] = useState(1);
-  const [showFallback, setShowFallback] = useState(false);
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
 
   // Fetch books for a specific category
-  const fetchCategoryBooks = async (category, pageNum = 1) => {
+  const fetchCategoryBooks = async (category) => {
     try {
       setLoadingCategories(prev => ({ ...prev, [category]: true }));
       
-      let apiUrl = `/api/books?search=${encodeURIComponent(category)}&page=${pageNum}`;
+      // Use simple search terms for better Gutenberg results
+      let searchTerm = category.toLowerCase();
+      
+      // Use a direct call to the Gutenberg API proxy
+      let apiUrl = `/api/books?search=${encodeURIComponent(searchTerm)}&page=1`;
       console.log(`Fetching ${category} books from: ${apiUrl}`);
       
       let response = await fetch(apiUrl);
       
-      // If we get an HTML response (error) and we're in development, try using localhost API
-      if (!response.ok || response.headers.get('content-type')?.includes('text/html')) {
-        console.warn('First API attempt failed, trying absolute URL');
-        
-        const baseUrl = window.location.hostname === 'localhost' ? 
-          'http://localhost:3000' : // Use port 3000 for the Express server
-          window.location.origin;
-          
-        apiUrl = `${baseUrl}/api/books?search=${encodeURIComponent(category)}&page=${pageNum}`;
-        console.log(`Retrying with: ${apiUrl}`);
-        
-        response = await fetch(apiUrl);
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-      }
-      
-      // Check content type to ensure it's JSON
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        throw new Error(`Expected JSON response but got ${contentType}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const data = await response.json();
@@ -167,76 +145,40 @@ function Home() {
         throw new Error('Invalid data format received from server');
       }
       
-      // Update the books state with this category
+      // Filter out books without proper data
+      const validResults = data.results.filter(book => 
+        book.title && book.formats && book.id
+      );
+      
+      // Take only a few books to avoid layout issues
       setBooks(prev => ({
         ...prev,
-        [category]: data.results.slice(0, 5) // Only take first 5 books for each category
+        [category]: validResults.slice(0, 4)
       }));
       
     } catch (error) {
       console.error(`Error fetching ${category} books:`, error);
-      
-      // Use fallback if available
-      if (showFallback) {
-        setBooks(prev => ({
-          ...prev,
-          [category]: generateFallbackBooks(category, 5)
-        }));
-      }
+      // Don't use fallbacks - show error state directly
+      setBooks(prev => ({
+        ...prev,
+        [category]: []
+      }));
     } finally {
       setLoadingCategories(prev => ({ ...prev, [category]: false }));
     }
   };
 
-  // Generate fallback books if API fails
-  const generateFallbackBooks = (category, count) => {
-    // This would be replaced with actual fallback logic
-    return Array(count).fill(null).map((_, index) => ({
-      id: `fallback-${category}-${index}`,
-      title: `${category} Book ${index + 1}`,
-      authors: [{name: 'Author Name'}],
-      formats: {'image/jpeg': '/placeholder-book.jpg'},
-      download_count: Math.floor(Math.random() * 1000),
-      rating: (4 + Math.random()).toFixed(1)
-    }));
-  };
-
   useEffect(() => {
-    // Fetch the first few categories initially
-    const initialCategories = bookCategories.slice(0, 4);
-    initialCategories.forEach(category => {
+    // Fetch all categories at once when component mounts
+    bookCategories.forEach(category => {
       fetchCategoryBooks(category);
     });
-    
-    // Lazy load the rest as user scrolls
-    const lazyLoadCategories = () => {
-      const scrollPosition = window.scrollY + window.innerHeight;
-      const pageHeight = document.body.scrollHeight;
-      
-      if (scrollPosition > pageHeight * 0.7) {
-        // Load more categories as user scrolls down
-        const remainingCategories = bookCategories.slice(4);
-        remainingCategories.forEach(category => {
-          if (!books[category] && !loadingCategories[category]) {
-            fetchCategoryBooks(category);
-          }
-        });
-        
-        // Remove scroll listener once all categories are loaded
-        if (Object.keys(books).length >= bookCategories.length) {
-          window.removeEventListener('scroll', lazyLoadCategories);
-        }
-      }
-    };
-    
-    window.addEventListener('scroll', lazyLoadCategories);
-    return () => window.removeEventListener('scroll', lazyLoadCategories);
-  }, [books, loadingCategories]);
+  }, []);
 
   const handleSearch = (e) => {
     e.preventDefault();
     if (search.trim()) {
-      navigate(`/search?query=${encodeURIComponent(search)}`);
+      navigate(`/search?query=${encodeURIComponent(search.trim())}`);
     }
   };
   
@@ -244,39 +186,26 @@ function Home() {
     navigate(`/book/${bookId}`);
   };
 
-  // Function to generate star rating display
-  const renderRating = (rating) => {
-    const ratingNum = parseFloat(rating) || 4.5;
-    return (
-      <BookRating>
-        {'★★★★★'.slice(0, Math.floor(ratingNum))}
-        {ratingNum % 1 > 0 ? '☆' : ''}
-        <span className="count">({ratingNum})</span>
-      </BookRating>
-    );
-  };
-
   return (
-    <Container maxWidth="lg" className="home-container">
+    <Container maxWidth="lg" sx={{ pt: 4, pb: 8 }}>
       {/* Hero Section with Search */}
-      <Box className="hero-section">
-        <Typography variant="h1" className="main-heading">
-          Read any book in 10 minutes
+      <Box sx={{ mb: 6, textAlign: 'center' }}>
+        <Typography variant="h1" sx={{ fontSize: { xs: '2rem', sm: '2.5rem' }, mb: 2, fontWeight: 700 }}>
+          Explore Classic Books
         </Typography>
-        <Typography variant="body1" className="sub-heading">
-          73,530 book summaries with audio • 24 languages
-          Best for busy folks for a key takeaways
+        <Typography variant="body1" sx={{ mb: 3, mx: 'auto', maxWidth: '600px' }}>
+          Discover thousands of free classic books from Project Gutenberg
         </Typography>
         
         <Box
           component="form"
           onSubmit={handleSearch}
-          className="search-form"
+          sx={{ maxWidth: '600px', mx: 'auto' }}
         >
           <SearchInput
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search for book summaries..."
+            placeholder="Search for books..."
             fullWidth
             variant="outlined"
             InputProps={{
@@ -290,22 +219,79 @@ function Home() {
         </Box>
       </Box>
 
+      {/* Trending Banner */}
+      <Paper 
+        elevation={0} 
+        sx={{
+          p: 3,
+          mb: 5,
+          borderRadius: 2,
+          background: 'linear-gradient(to right, rgba(15,15,25,0.95), rgba(25,25,40,0.95))',
+          position: 'relative',
+          overflow: 'hidden',
+          boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.1)',
+        }}
+      >
+        <Box 
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: { xs: 'wrap', sm: 'nowrap' },
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: { xs: 2, sm: 0 } }}>
+            <LocalFireDepartmentIcon color="error" fontSize="large" sx={{ mr: 2 }} />
+            <Box>
+              <Typography 
+                variant="h5" 
+                component="h2" 
+                sx={{ fontWeight: 600 }}
+              >
+                Trending Books
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Explore the most popular books across different genres. Discover what others are reading right now.
+              </Typography>
+            </Box>
+          </Box>
+          <Button 
+            variant="outlined" 
+            onClick={() => navigate('/trending')}
+            endIcon={<ArrowForwardIcon />}
+            sx={{ 
+              borderRadius: 8,
+              px: 3,
+              py: 1,
+              borderColor: 'rgba(255,255,255,0.15)', 
+              color: 'primary.main',
+              '&:hover': {
+                borderColor: 'primary.main',
+                backgroundColor: 'rgba(244, 228, 188, 0.05)',
+              }
+            }}
+          >
+            View Trending
+          </Button>
+        </Box>
+      </Paper>
+
       {/* Book Categories */}
       {bookCategories.map((category) => (
         <CategorySection key={category}>
           <SectionHeading variant="h2">
             {category}
-            <span className="see-all">See all</span>
+            <span className="see-all" onClick={() => navigate(`/search?query=${category}`)}>See all</span>
           </SectionHeading>
           
-          <Grid container spacing={2}>
-            {loadingCategories[category] ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%', py: 4 }}>
-                <CircularProgress size={30} />
-              </Box>
-            ) : books[category] && books[category].length > 0 ? (
-              books[category].map((book) => (
-                <Grid item key={book.id} xs={6} sm={4} md={2.4}>
+          {loadingCategories[category] ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress size={30} />
+            </Box>
+          ) : books[category] && books[category].length > 0 ? (
+            <Grid container spacing={3}>
+              {books[category].map((book) => (
+                <Grid item key={book.id} xs={6} sm={6} md={3}>
                   <BookCard onClick={() => handleBookSelect(book.id)}>
                     <BookCover
                       image={book.formats['image/jpeg'] || '/placeholder-book.jpg'}
@@ -330,7 +316,6 @@ function Home() {
                       >
                         {book.title}
                       </Typography>
-                      {renderRating(book.rating || 4.5)}
                       <Typography 
                         variant="caption" 
                         color="text.secondary"
@@ -341,15 +326,13 @@ function Home() {
                     </CardContent>
                   </BookCard>
                 </Grid>
-              ))
-            ) : (
-              <Grid item xs={12}>
-                <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-                  No books found for this category.
-                </Typography>
-              </Grid>
-            )}
-          </Grid>
+              ))}
+            </Grid>
+          ) : (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+              No books found for this category.
+            </Typography>
+          )}
         </CategorySection>
       ))}
     </Container>

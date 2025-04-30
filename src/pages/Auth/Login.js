@@ -14,7 +14,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
-import { signIn, signInWithGoogle, PRODUCTION_URL } from '../../lib/supabase';
+import { signIn, signInWithGoogle, PRODUCTION_URL, getRedirectUrl, supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import GoogleIcon from '@mui/icons-material/Google';
 import { debugOAuthRedirects, fixOAuthRedirectIssues } from '../../util/debugOAuth';
@@ -30,7 +30,7 @@ const Login = () => {
   const [signInError, setSignInError] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, isAuthenticated, login, signInWithGoogle } = useAuth();
+  const { user, isAuthenticated, setUser, signInWithGoogle } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -41,8 +41,8 @@ const Login = () => {
     
     // If we detect we're on localhost in production, force redirect
     if (isProduction && isLocalhost) {
-      console.log('🚨 Login component detected localhost in production, redirecting to:', PRODUCTION_URL);
-      window.location.replace(PRODUCTION_URL); // Use replace instead of href for cleaner history
+      console.log('🚨 Login component detected localhost in production, redirecting to:', getRedirectUrl());
+      window.location.replace(getRedirectUrl()); // Use replace instead of href for cleaner history
       return; // Exit early, no need to continue
     }
     
@@ -90,12 +90,24 @@ const Login = () => {
       setLoading(true);
       setError('');
       
-      const { data, error: signInError } = await signIn(email, password);
+      // Use Supabase's auth directly to ensure proper handling
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
       
       if (signInError) throw signInError;
       
-      if (data) {
-        navigate('/');
+      if (data?.user) {
+        console.log('Login successful', data.user);
+        
+        // Update auth context
+        setUser(data.user);
+        
+        // Redirect to the correct URL after login
+        window.location.href = getRedirectUrl();
+      } else {
+        throw new Error('Login failed - no user data returned');
       }
     } catch (err) {
       console.error('Login error:', err);
@@ -107,7 +119,7 @@ const Login = () => {
   
   const handleGoogleLogin = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    setGoogleLoading(true);
     setSignInError(null);
     try {
       console.log('Initiating Google login');
@@ -118,7 +130,7 @@ const Login = () => {
     } catch (error) {
       console.error('Google login error:', error.message);
       setSignInError(error.message);
-      setLoading(false);
+      setGoogleLoading(false);
     }
   };
   

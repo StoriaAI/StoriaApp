@@ -48,6 +48,12 @@ const getSiteUrl = () => {
   return window.location.origin;
 };
 
+// Helper function to get the appropriate redirect URL (for consistency with other files)
+export const getRedirectUrl = () => {
+  // Use the same logic as getSiteUrl for consistency
+  return getSiteUrl();
+};
+
 debugLog('Environment:', isProduction ? 'Production' : 'Development');
 debugLog('Site URL:', getSiteUrl());
 
@@ -279,8 +285,13 @@ export const handleAuthRedirect = () => {
 };
 
 // User profile helper functions
-export const updateUserProfile = async (userId, profileData) => {
+export const updateUserProfile = async (profileData) => {
   try {
+    const userId = profileData.id;
+    if (!userId) {
+      throw new Error('User ID is required in profileData');
+    }
+    
     debugLog('Updating profile for user:', userId);
     
     // First, check if the user already has a profile
@@ -290,16 +301,21 @@ export const updateUserProfile = async (userId, profileData) => {
       .eq('user_id', userId)
       .single();
     
+    // Prepare the data, removing id field which is just for our function
+    const dataToUpdate = { ...profileData };
+    delete dataToUpdate.id;
+    
+    // Add timestamps
+    dataToUpdate.updated_at = new Date().toISOString();
+    
     // If we have an existing profile, use an update operation
-    if (!existingProfile?.error && existingProfile) {
-      debugLog('Existing profile found, updating with id:', userId);
+    if (existingProfile) {
+      debugLog('Existing profile found, updating for user:', userId);
       const { data, error } = await supabase
         .from('user_profiles')
-        .update({ 
-          ...profileData,
-          updated_at: new Date().toISOString() 
-        })
-        .eq('user_id', userId);
+        .update(dataToUpdate)
+        .eq('user_id', userId)
+        .select();
       
       if (error) {
         debugLog('Error updating existing user profile:', error.message);
@@ -312,14 +328,16 @@ export const updateUserProfile = async (userId, profileData) => {
     
     // If no profile exists, use an insert operation
     debugLog('No existing profile found, creating new profile for user:', userId);
+    
+    // For new profiles, add user_id and created_at
+    dataToUpdate.user_id = userId;
+    dataToUpdate.created_at = new Date().toISOString();
+    dataToUpdate.has_completed_onboarding = true;
+    
     const { data, error } = await supabase
       .from('user_profiles')
-      .insert({ 
-        user_id: userId,
-        ...profileData,
-        created_at: profileData.created_at || new Date().toISOString(),
-        updated_at: new Date().toISOString() 
-      });
+      .insert(dataToUpdate)
+      .select();
     
     if (error) {
       debugLog('Error creating user profile:', error.message);
@@ -445,6 +463,55 @@ export const setupOAuth = () => {
       }
     }
   });
+};
+
+// Bookmark related functions
+export const saveBookmark = async (bookmarkData) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_bookmarks')
+      .insert([bookmarkData]);
+      
+    return { data, error };
+  } catch (err) {
+    console.error('Error saving bookmark:', err);
+    return { data: null, error: err };
+  }
+};
+
+export const getUserBookmarks = async (userId, bookId = null) => {
+  try {
+    let query = supabase
+      .from('user_bookmarks')
+      .select('*')
+      .eq('user_id', userId);
+      
+    // Filter by book ID if provided
+    if (bookId) {
+      query = query.eq('book_id', bookId);
+    }
+    
+    const { data, error } = await query;
+    
+    return { data, error };
+  } catch (err) {
+    console.error('Error getting bookmarks:', err);
+    return { data: null, error: err };
+  }
+};
+
+export const deleteBookmark = async (bookmarkId) => {
+  try {
+    const { error } = await supabase
+      .from('user_bookmarks')
+      .delete()
+      .eq('id', bookmarkId);
+      
+    return { error };
+  } catch (err) {
+    console.error('Error deleting bookmark:', err);
+    return { error: err };
+  }
 };
 
 // Call the setup function

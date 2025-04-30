@@ -6,12 +6,17 @@ import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Home from './pages/Home';
 import BookReader from './pages/BookReader';
+import BookDetail from './pages/BookDetail';
 import Login from './pages/Auth/Login';
 import SignUp from './pages/Auth/SignUp';
 import About from './pages/About';
 import Contact from './pages/Contact';
 import Profile from './pages/Profile';
 import ProfilePage from './pages/ProfilePage';
+import Search from './pages/Search';
+import Trending from './pages/Trending';
+import Pricing from './pages/Pricing';
+import Settings from './pages/Settings';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { CircularProgress, Box } from '@mui/material';
 import { supabase } from './lib/supabase';
@@ -135,6 +140,7 @@ const LoadingScreen = () => (
 // Component to handle OAuth redirects
 const HandleOAuthRedirect = () => {
   const location = useLocation();
+  const { setUser } = useAuth();
   
   useEffect(() => {
     // CRITICAL: Check if we're mistakenly on localhost in production
@@ -163,40 +169,47 @@ const HandleOAuthRedirect = () => {
       }
     }
   
-    // Check if there's a hash in the URL (common for OAuth redirects)
-    if (location.hash || location.search) {
-      console.log('Detected potential auth redirect in HandleOAuthRedirect component');
-      
-      // Run our new OAuth debug helper
-      debugOAuthRedirects();
-      
-      // Try to fix common OAuth issues
-      fixOAuthRedirectIssues().then(result => {
-        if (result.success) {
-          console.log('Successfully fixed OAuth redirect in HandleOAuthRedirect component!');
-          return;
-        }
+    // Only handle redirects if we're not already on an auth callback route
+    // This prevents double-handling of auth callbacks
+    if (location.pathname !== '/auth/callback' && location.pathname !== '/auth/v2/callback') {
+      // Check if there's a hash in the URL (common for OAuth redirects)
+      if (location.hash || location.search) {
+        console.log('Detected potential auth redirect in HandleOAuthRedirect component');
         
-        // If the new utility didn't fix it, try the original debug helper as fallback
-        debugAuth().then(() => {
-          console.log('Debug complete. Attempting to handle hash redirect...');
+        // Run our new OAuth debug helper
+        debugOAuthRedirects();
+        
+        // Try to fix common OAuth issues
+        fixOAuthRedirectIssues().then(result => {
+          if (result.success) {
+            console.log('Successfully fixed OAuth redirect in HandleOAuthRedirect component!');
+            return;
+          }
           
-          // Explicitly handle the hash redirect
-          handleHashRedirect().then(({ data, error }) => {
-            if (error) {
-              console.error('Failed to handle hash redirect:', error);
-            } else if (data) {
-              console.log('Successfully handled hash redirect in HandleOAuthRedirect component!');
-              
-              // Clear the URL
-              window.history.replaceState(null, '', window.location.pathname);
-            }
+          // If the new utility didn't fix it, try the original debug helper as fallback
+          debugAuth().then(() => {
+            console.log('Debug complete. Attempting to handle hash redirect...');
+            
+            // Explicitly handle the hash redirect
+            handleHashRedirect().then(({ data, error }) => {
+              if (error) {
+                console.error('Failed to handle hash redirect:', error);
+              } else if (data) {
+                console.log('Successfully handled hash redirect in HandleOAuthRedirect component!');
+                
+                if (data.session && data.session.user) {
+                  // Update user state in auth context
+                  setUser(data.session.user);
+                }
+              }
+            });
           });
         });
-      });
+      }
     }
-  }, [location]);
-  
+  }, [location, setUser]);
+
+  // This component doesn't render anything
   return null;
 };
 
@@ -225,13 +238,7 @@ const PublicRoute = ({ children }) => {
 
 // Landing page component
 const LandingPage = () => {
-  const { isAuthenticated } = useAuth();
-  
-  if (isAuthenticated) {
-    return <Home />;
-  }
-  
-  return <Navigate to="/login" />;
+  return <Home />;
 };
 
 // App content component that has access to auth context
@@ -250,7 +257,13 @@ const AppContent = () => {
       <Navbar />
       <Box sx={{ flex: 1 }}>
         <Routes>
-          <Route path="/" element={<LandingPage />} />
+          {/* Auth Routes - Place these first to ensure they are prioritized */}
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/auth/v2/callback" element={<AuthCallback />} />
+          <Route path="/auth/status" element={<AuthStatus />} />
+        
+          {/* Public Routes */}
+          <Route path="/" element={<Home />} />
           <Route 
             path="/login" 
             element={
@@ -267,29 +280,15 @@ const AppContent = () => {
               </PublicRoute>
             } 
           />
-          {/* Auth Routes */}
-          <Route path="/auth/callback" element={<AuthCallback />} />
-          <Route path="/auth/v2/callback" element={<AuthCallback />} />
-          <Route path="/auth/status" element={<AuthStatus />} />
           
-          <Route 
-            path="/books" 
-            element={
-              <ProtectedRoute>
-                <Home />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/book/:id" 
-            element={
-              <ProtectedRoute>
-                <BookReader />
-              </ProtectedRoute>
-            } 
-          />
+          {/* Book Routes - Order matters: more specific routes first */}
+          <Route path="/book/read/:id" element={<BookReader />} />
+          <Route path="/book/:id" element={<BookDetail />} />
+          
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/trending" element={<Trending />} />
           <Route 
             path="/profile" 
             element={
@@ -304,6 +303,20 @@ const AppContent = () => {
             element={
               <ProfilePage />
             } 
+          />
+          {/* Settings page - for authenticated users */}
+          <Route 
+            path="/settings" 
+            element={
+              <ProtectedRoute>
+                <Settings />
+              </ProtectedRoute>
+            } 
+          />
+          {/* Search page - accessible to both authenticated and non-authenticated users */}
+          <Route 
+            path="/search" 
+            element={<Search />} 
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
