@@ -95,17 +95,20 @@ module.exports = async (req, res) => {
     // OpenAI API call to generate ambiance prompt
     const generateAmbiance = async () => {
       try {
+        const systemPrompt = process.env.OPENAI_SYSTEM_PROMPT || 
+          `You are an expert at analyzing text and extracting emotional mood and setting details.
+          Create a concise prompt (max 50 words) for generating INSTRUMENTAL background ambiance music that matches the emotional mood and setting of the text. Focus on:
+          - The dominant emotional mood (e.g., joyful, tense, melancholic)
+          - The setting or environment if described 
+          - Key ambient elements
+          - SPECIFY CLEARLY: NO VOCALS, INSTRUMENTAL ONLY, BACKGROUND/AMBIENT SOUND ONLY`;
+
         const response = await axios.post(process.env.OPENAI_API_ENDPOINT, {
           model: 'gpt-4',
           messages: [
             { 
               role: 'system', 
-              content: process.env.OPENAI_SYSTEM_PROMPT || `You are an expert at analyzing text and extracting emotional mood and setting details.
-              Create a concise prompt (max 50 words) for generating background ambiance music that matches the emotional mood and setting of the text. Focus on:
-              - The dominant emotional mood (e.g., joyful, tense, melancholic)
-              - The setting or environment if described 
-              - Key ambient elements
-              - NO vocals, instrumental only`
+              content: systemPrompt
             },
             { role: 'user', content: promptContext + text.substring(0, 800) } // Limit text to reduce tokens
           ],
@@ -151,6 +154,12 @@ module.exports = async (req, res) => {
     
     console.log('ElevenLabs prompt:', elevenLabsPrompt);
     
+    // Explicitly append a note about no vocals if not present
+    if (!elevenLabsPrompt.toLowerCase().includes('no vocal') && 
+        !elevenLabsPrompt.toLowerCase().includes('instrumental')) {
+      elevenLabsPrompt += " (NO VOCALS, INSTRUMENTAL ONLY)";
+    }
+    
     // ElevenLabs API call to generate music
     // Add page and book identifiers to request for better variation
     const musicPrompt = `${elevenLabsPrompt} (Book:${bookId || 'Unknown'}, Page:${pageId || 'Unknown'})`;
@@ -166,7 +175,7 @@ module.exports = async (req, res) => {
           throw new Error('ELEVENLABS_API_KEY is missing or empty');
         }
 
-        // Make API request with correct header format
+        // Make API request with correct header format and endpoint
         const response = await axios.post(process.env.ELEVENLABS_API_ENDPOINT, {
           text: musicPrompt
         }, {

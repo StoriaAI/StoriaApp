@@ -754,7 +754,8 @@ function BookReader() {
       return;
     }
     
-    setLoading(true);
+    // Instead of setLoading(true) which affects entire page, use a local state
+    setGeneratingMusic(true);
     setLoadingMessage('Generating music for current page...');
     
     try {
@@ -770,7 +771,7 @@ function BookReader() {
       console.error('Error in generateMusicForCurrentPage:', error);
       // Error is already displayed by the generateMusicForPage function
     } finally {
-      setLoading(false);
+      setGeneratingMusic(false);
     }
   };
 

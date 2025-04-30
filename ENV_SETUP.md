@@ -30,8 +30,8 @@ GUTENBERG_API_ENDPOINT=https://gutendex.com/
 PORT=3001
 NODE_ENV=development 
 
-# OpenAI System Prompt
-OPENAI_SYSTEM_PROMPT="You are an expert at analyzing text and extracting emotional mood and setting details..."
+# OpenAI System Prompt for Music Generation - Important for non-vocal ambient music
+OPENAI_SYSTEM_PROMPT="You are an expert at analyzing text and extracting emotional mood and setting details. Create a concise prompt (max 50 words) for generating INSTRUMENTAL background ambiance music that matches the emotional mood and setting of the text. Focus on: the dominant emotional mood (e.g., joyful, tense, melancholic), the setting or environment, and key ambient elements. IMPORTANT: Specify NO VOCALS, INSTRUMENTAL ONLY, background/ambient sound only."
 
 # Supabase Configuration - Important for authentication
 REACT_APP_SUPABASE_URL=https://your-project-ref.supabase.co
@@ -44,6 +44,26 @@ VERCEL_URL=your-vercel-app.vercel.app
 REACT_APP_VERCEL_URL=https://your-vercel-app.vercel.app
 VERCEL_ENV=production
 ```
+
+## Important Notes About Music Generation
+
+### ElevenLabs Sound Generation API
+
+For the music generation feature to work correctly:
+
+1. Use the exact endpoint shown above for ElevenLabs: `https://api.elevenlabs.io/v1/sound-generation`
+2. Do not use any other ElevenLabs endpoints for music generation
+3. Ensure your ElevenLabs account has sound generation capabilities enabled
+4. Make sure your ElevenLabs API key has sufficient quota for sound generation
+
+### OpenAI Prompt for Ambient Music
+
+The `OPENAI_SYSTEM_PROMPT` is critical for proper music generation:
+
+1. The default prompt above is optimized to generate **instrumental, non-vocal** music
+2. It specifically instructs the model to create ambient/background sounds
+3. If you're experiencing issues with vocals in the generated music, ensure this prompt is set correctly
+4. Do not remove the "NO VOCALS, INSTRUMENTAL ONLY" directive from the prompt
 
 ## Important Note for Google Authentication
 
