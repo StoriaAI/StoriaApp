@@ -25,6 +25,8 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import SearchIcon from '@mui/icons-material/Search';
+import ContinueReading from '../components/ContinueReading';
+import { useAuth } from '../contexts/AuthContext';
 
 // Styled components
 const SearchInput = styled(TextField)(({ theme }) => ({
@@ -208,6 +210,7 @@ function Trending() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const { isAuthenticated } = useAuth();
 
   // Initialize expanded state for each genre and start loading all genres
   useEffect(() => {
@@ -453,7 +456,7 @@ function Trending() {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ pt: 4, pb: 8 }}>
+    <Container maxWidth="lg" sx={{ mt: isMobile ? 2 : 5, mb: 8 }}>
       {/* Search Bar */}
       <Box sx={{ mb: 4, width: '100%', display: 'flex', justifyContent: 'center' }}>
         <Box
@@ -495,6 +498,9 @@ function Trending() {
           based on download counts and reader popularity.
         </Typography>
       </Box>
+
+      {/* Continue Reading Section - shown only for authenticated users */}
+      {isAuthenticated && <ContinueReading />}
 
       {/* Genre sections */}
       <Grid container spacing={3}>

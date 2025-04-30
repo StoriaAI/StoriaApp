@@ -23,6 +23,8 @@ import FallbackLibrary from '../components/FallbackLibrary';
 import '../styles/Home.css';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import ContinueReading from '../components/ContinueReading';
+import { useAuth } from '../contexts/AuthContext';
 
 // Styled Components
 const SectionHeading = styled(Typography)(({ theme }) => ({
@@ -124,6 +126,7 @@ function Home() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const { isAuthenticated } = useAuth();
 
   // Fetch books for a specific category
   const fetchCategoryBooks = async (category, isBackgroundRefresh = false) => {
@@ -323,7 +326,7 @@ function Home() {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ pt: 4, pb: 8 }}>
+    <Container maxWidth="lg" sx={{ mt: isMobile ? 2 : 5, mb: 8 }}>
       {/* Hero Section with Search */}
       <Box sx={{ mb: 6, textAlign: 'center' }}>
         <Typography variant="h1" sx={{ fontSize: { xs: '2rem', sm: '2.5rem' }, mb: 2, fontWeight: 700 }}>
@@ -411,6 +414,9 @@ function Home() {
           </Button>
         </Box>
       </Paper>
+
+      {/* Continue Reading Section - shown only for authenticated users */}
+      {isAuthenticated && <ContinueReading />}
 
       {/* Book Categories */}
       {bookCategories.map((category) => (

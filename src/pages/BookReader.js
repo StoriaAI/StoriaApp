@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Container, 
   Paper, 
@@ -42,6 +42,7 @@ import { supabase, getUserBookmarks, saveBookmark, deleteBookmark } from '../lib
 function BookReader() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, isAuthenticated } = useAuth();
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -69,6 +70,8 @@ function BookReader() {
   const [selectionMenuOpen, setSelectionMenuOpen] = useState(false);
   const [bookmarkSnackbarOpen, setBookmarkSnackbarOpen] = useState(false);
   const [bookmarkMessage, setBookmarkMessage] = useState('');
+  // Add state for highlighted bookmarks
+  const [highlightedBookmarks, setHighlightedBookmarks] = useState([]);
   const contentRef = useRef(null);
   const audioRef = useRef(null);
   const nextPagesToGenerate = useRef([]);
@@ -82,6 +85,9 @@ function BookReader() {
   // Add a specific debug flag to disable music to ensure reading works properly
   const DEBUG_DISABLE_MUSIC = true; // Set to false if you want to enable music again
 
+  // Extract bookmark parameter from URL
+  const bookmarkParam = new URLSearchParams(location.search).get('bookmark');
+
   // Initialize page and fetch first content and load bookmarks
   useEffect(() => {
     const initialize = async () => {
@@ -89,25 +95,102 @@ function BookReader() {
       setLoadingMessage('Loading book content...');
       
       try {
-        // Fetch the first page - ensure the id is properly extracted from URL
-        const response = await fetch(`/api/read/${id}?page=0`);
-        if (!response.ok) {
-          throw new Error(`Error fetching book: ${response.status}`);
+        // Check if we need to load a bookmark first
+        if (isAuthenticated && user && bookmarkParam) {
+          if (bookmarkParam === 'latest') {
+            // Fetch the latest bookmark for this book
+            const { data: bookmarkData, error: bookmarkError } = await getUserBookmarks(user.id, id);
+            
+            if (bookmarkError) throw bookmarkError;
+            
+            // If we have bookmarks for this book, get the most recent one
+            if (bookmarkData && bookmarkData.length > 0) {
+              // Sort by creation date, most recent first
+              const sortedBookmarks = bookmarkData.sort(
+                (a, b) => new Date(b.created_at) - new Date(a.created_at)
+              );
+              
+              // Get page number from the most recent bookmark
+              const latestBookmark = sortedBookmarks[0];
+              const bookmarkPage = latestBookmark.page_number || 0;
+              
+              // Set the page to the bookmarked page
+              setPage(bookmarkPage);
+              
+              // Fetch content for the bookmarked page
+              const response = await fetch(`/api/read/${id}?page=${bookmarkPage}`);
+              if (!response.ok) {
+                throw new Error(`Error fetching book: ${response.status}`);
+              }
+              
+              const data = await response.json();
+              if (!data.content || typeof data.content !== 'string') {
+                throw new Error('Invalid content received from the server');
+              }
+              
+              // Set content and other data
+              setContent(data.content);
+              setTotalPages(data.totalPages);
+              
+              // Add to pageContents cache
+              setPageContents({
+                [bookmarkPage]: data.content
+              });
+              
+              // Remove the bookmark param from URL without refreshing the page
+              const newUrl = window.location.pathname;
+              window.history.replaceState({}, document.title, newUrl);
+              
+              // Show notification about bookmark
+              setBookmarkMessage(`Resumed reading from page ${bookmarkPage + 1}`);
+              setBookmarkSnackbarOpen(true);
+            } else {
+              // No bookmarks found, load first page
+              await loadFirstPage();
+            }
+          } else if (bookmarkParam === 'true' && page) {
+            // This is for a specific page bookmark - page is already set from URL
+            // Just load the page content
+            const pageToLoad = page;
+            
+            // Fetch content for the specified page
+            const response = await fetch(`/api/read/${id}?page=${pageToLoad}`);
+            if (!response.ok) {
+              throw new Error(`Error fetching book: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            if (!data.content || typeof data.content !== 'string') {
+              throw new Error('Invalid content received from the server');
+            }
+            
+            // Set content and other data
+            setContent(data.content);
+            setTotalPages(data.totalPages);
+            
+            // Add to pageContents cache
+            setPageContents({
+              [pageToLoad]: data.content
+            });
+            
+            // Update URL without the bookmark parameter
+            const params = new URLSearchParams(location.search);
+            params.delete('bookmark');
+            params.set('page', pageToLoad.toString());
+            const newUrl = `${window.location.pathname}?${params.toString()}`;
+            window.history.replaceState({}, document.title, newUrl);
+            
+            // Show notification about bookmark
+            setBookmarkMessage(`Opened page ${pageToLoad + 1}`);
+            setBookmarkSnackbarOpen(true);
+          } else {
+            // Unknown bookmark parameter, load first page
+            await loadFirstPage();
+          }
+        } else {
+          // No bookmark param, load first page or use specific page from URL
+          await loadFirstPage();
         }
-        
-        const data = await response.json();
-        if (!data.content || typeof data.content !== 'string') {
-          throw new Error('Invalid content received from the server');
-        }
-        
-        // Set the important book info
-        setContent(data.content);
-        setTotalPages(data.totalPages);
-        
-        // Add to pageContents cache
-        setPageContents({
-          0: data.content
-        });
         
         // Load user bookmarks for this book
         if (isAuthenticated) {
@@ -119,7 +202,6 @@ function BookReader() {
           setLoadingMessage('Generating ambient music...');
           await generateMusicForCurrentPage();
         }
-        
       } catch (err) {
         console.error('Initialization error:', err);
         setError(`Failed to initialize: ${err.message}`);
@@ -129,7 +211,28 @@ function BookReader() {
     };
     
     initialize();
-  }, [id, isAuthenticated]);
+  }, [id, isAuthenticated, bookmarkParam, page, location.search]);
+
+  // Helper function to load the first page of the book
+  const loadFirstPage = async () => {
+    const response = await fetch(`/api/read/${id}?page=0`);
+    if (!response.ok) {
+      throw new Error(`Error fetching book: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    if (!data.content || typeof data.content !== 'string') {
+      throw new Error('Invalid content received from the server');
+    }
+    
+    setContent(data.content);
+    setTotalPages(data.totalPages);
+    
+    // Add to pageContents cache
+    setPageContents({
+      0: data.content
+    });
+  };
 
   // Fetch bookmarks for current user and book
   const fetchBookmarks = async () => {
@@ -142,6 +245,8 @@ function BookReader() {
       
       if (data) {
         setBookmarks(data);
+        // Set highlighted bookmarks to display in text
+        setHighlightedBookmarks(data.filter(bookmark => bookmark.selected_word));
       }
     } catch (err) {
       console.error('Error fetching bookmarks:', err);
@@ -174,7 +279,10 @@ function BookReader() {
       
       // Update local state
       if (data) {
-        setBookmarks([...bookmarks, { ...newBookmark, id: data[0]?.id }]);
+        const newBookmarkWithId = { ...newBookmark, id: data[0]?.id };
+        setBookmarks([...bookmarks, newBookmarkWithId]);
+        // Update highlighted bookmarks
+        setHighlightedBookmarks([...highlightedBookmarks, newBookmarkWithId]);
         setBookmarkMessage('Bookmark added successfully');
         setBookmarkSnackbarOpen(true);
       }
@@ -199,6 +307,8 @@ function BookReader() {
       
       // Update local state
       setBookmarks(bookmarks.filter(bookmark => bookmark.id !== bookmarkId));
+      // Update highlighted bookmarks
+      setHighlightedBookmarks(highlightedBookmarks.filter(bookmark => bookmark.id !== bookmarkId));
       setBookmarkMessage('Bookmark removed');
       setBookmarkSnackbarOpen(true);
     } catch (err) {
@@ -868,6 +978,38 @@ function BookReader() {
     console.log(`Background generation running: ${backgroundGenerating}`);
   };
 
+  // Format date for display
+  const formatBookmarkDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  // Function to highlight bookmarked text in content
+  const highlightBookmarkedText = (text) => {
+    if (!text || highlightedBookmarks.length === 0) return text;
+    
+    let highlightedText = text;
+    
+    // Sort bookmarks by word length (longest first) to avoid nested highlights
+    const sortedBookmarks = [...highlightedBookmarks].sort((a, b) => 
+      (b.selected_word?.length || 0) - (a.selected_word?.length || 0)
+    );
+    
+    for (const bookmark of sortedBookmarks) {
+      if (!bookmark.selected_word) continue;
+      
+      // Create a marker with the bookmark's timestamp as tooltip
+      const dateDisplay = formatBookmarkDate(bookmark.created_at);
+      const replacementHtml = `<span class="bookmarked-text" data-bookmark-id="${bookmark.id}" title="Bookmarked on ${dateDisplay}">${bookmark.selected_word}</span>`;
+      
+      // Use a regex to replace the word while preserving case
+      const regex = new RegExp(`\\b${bookmark.selected_word}\\b`, 'i');
+      highlightedText = highlightedText.replace(regex, replacementHtml);
+    }
+    
+    return highlightedText;
+  };
+
   if (initialLoading) {
     return (
       <Backdrop
@@ -1060,19 +1202,17 @@ function BookReader() {
           borderRadius: isMobile ? 1 : 2,
           position: 'relative'
         }}>
-          <Typography 
-            ref={contentRef}
-            variant="body1" 
-            sx={{ 
-              whiteSpace: 'pre-line',
-              fontSize: `${fontSize}px`,
-              lineHeight: 1.6
-            }}
-            onMouseUp={handleTextSelection}
-            onTouchEnd={handleTextSelection}
-          >
-            {content}
-          </Typography>
+          <div className="reader-content" style={{ fontSize: `${fontSize}px` }}>
+            <div 
+              ref={contentRef}
+              className="book-content"
+              style={{ fontSize: `${fontSize}px` }}
+              onMouseUp={handleTextSelection}
+              dangerouslySetInnerHTML={{ 
+                __html: highlightBookmarkedText(content) 
+              }}
+            />
+          </div>
           
           {/* Selection Menu */}
           <Menu
@@ -1095,7 +1235,7 @@ function BookReader() {
         {/* Bookmark success/error snackbar */}
         <Snackbar
           open={bookmarkSnackbarOpen}
-          autoHideDuration={3000}
+          autoHideDuration={4000}
           onClose={() => setBookmarkSnackbarOpen(false)}
           message={bookmarkMessage}
         />

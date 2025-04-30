@@ -149,10 +149,20 @@ const BookmarksList = () => {
       
       {Object.entries(bookmarks).map(([bookId, bookMarks]) => (
         <Paper key={bookId} sx={{ mb: 3, overflow: 'hidden' }}>
-          <Box sx={{ p: 2, bgcolor: 'primary.main', color: 'white' }}>
+          <Box sx={{ p: 2, bgcolor: 'primary.main', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography variant="h6">
               {bookMarks[0]?.book_title || `Book ID: ${bookId}`}
             </Typography>
+            <Tooltip title="Continue Reading">
+              <IconButton 
+                component={Link}
+                to={`/read/${bookId}?bookmark=latest`}
+                aria-label="continue reading"
+                sx={{ color: 'white' }}
+              >
+                <OpenInNewIcon />
+              </IconButton>
+            </Tooltip>
           </Box>
           
           <List sx={{ py: 0 }}>
@@ -166,7 +176,7 @@ const BookmarksList = () => {
                       <Tooltip title="Go to bookmark">
                         <IconButton 
                           component={Link}
-                          to={`/read/${bookmark.book_id}?page=${bookmark.page_number}`}
+                          to={`/read/${bookmark.book_id}?page=${bookmark.page_number}&bookmark=true`}
                           edge="end" 
                           aria-label="go to bookmark"
                         >
