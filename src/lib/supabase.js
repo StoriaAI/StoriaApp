@@ -493,6 +493,48 @@ export const getUserBookmarks = async (userId, bookId = null) => {
     
     const { data, error } = await query;
     
+    if (error) throw error;
+    
+    // If we have bookmarks, fetch book details for each unique book
+    if (data && data.length > 0) {
+      // Get unique book IDs
+      const bookIds = [...new Set(data.map(bookmark => bookmark.book_id))];
+      
+      // Create an object to store book details
+      const bookDetails = {};
+      
+      // Fetch details for each book
+      for (const id of bookIds) {
+        try {
+          const response = await fetch(`/api/books?id=${id}`);
+          if (response.ok) {
+            const book = await response.json();
+            if (book && book.title) {
+              bookDetails[id] = book;
+            }
+          }
+        } catch (err) {
+          console.error(`Error fetching details for book ${id}:`, err);
+        }
+      }
+      
+      // Enhance bookmark data with book details
+      const enhancedData = data.map(bookmark => {
+        const bookDetail = bookDetails[bookmark.book_id];
+        if (bookDetail) {
+          return {
+            ...bookmark,
+            book_title: bookDetail.title,
+            formats: bookDetail.formats || {},
+            authors: bookDetail.authors || []
+          };
+        }
+        return bookmark;
+      });
+      
+      return { data: enhancedData, error: null };
+    }
+    
     return { data, error };
   } catch (err) {
     console.error('Error getting bookmarks:', err);

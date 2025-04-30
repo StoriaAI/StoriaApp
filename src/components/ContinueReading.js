@@ -219,7 +219,7 @@ const ContinueReading = () => {
             <BookCard onClick={(e) => handleBookClick(bookmark, e)}>
               <Box sx={{ position: 'relative' }}>
                 <BookCover 
-                  image={bookmark.book_cover || `https://via.placeholder.com/150x225?text=${bookmark.book_title || 'Book'}`} 
+                  image={bookmark.formats?.['image/jpeg'] || `https://via.placeholder.com/150x225?text=${encodeURIComponent(bookmark.book_title || 'Book')}`} 
                   title={bookmark.book_title}
                 />
                 <BookmarkBadge>

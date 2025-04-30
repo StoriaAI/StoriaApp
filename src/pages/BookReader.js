@@ -22,7 +22,10 @@ import {
   Stack,
   Menu,
   MenuItem,
-  Snackbar
+  Snackbar,
+  ListItemIcon,
+  ListItemText,
+  InputAdornment
 } from '@mui/material';
 import VolumeDownIcon from '@mui/icons-material/VolumeDown';
 import VolumeUpIcon from '@mui/icons-material/VolumeUp';
@@ -36,6 +39,8 @@ import RepeatIcon from '@mui/icons-material/Repeat';
 import RepeatOneIcon from '@mui/icons-material/RepeatOne';
 import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, getUserBookmarks, saveBookmark, deleteBookmark } from '../lib/supabase';
 
@@ -88,6 +93,9 @@ function BookReader() {
   // Extract bookmark parameter from URL
   const bookmarkParam = new URLSearchParams(location.search).get('bookmark');
 
+  // Use a ref to track if we need to reapply highlighting when content changes
+  const contentChangeRef = useRef(false);
+
   // Initialize page and fetch first content and load bookmarks
   useEffect(() => {
     const initialize = async () => {
@@ -95,22 +103,29 @@ function BookReader() {
       setLoadingMessage('Loading book content...');
       
       try {
+        // First, fetch user bookmarks regardless of the bookmark parameter
+        // This ensures we have all bookmarks for highlighting
+        if (isAuthenticated && user) {
+          const { data: bookmarkData, error: bookmarkError } = await getUserBookmarks(user.id, id);
+          
+          if (bookmarkError) {
+            console.error('Error fetching bookmarks:', bookmarkError);
+          } else if (bookmarkData) {
+            setBookmarks(bookmarkData);
+            setHighlightedBookmarks(bookmarkData.filter(bookmark => bookmark.selected_word));
+          }
+        }
+        
         // Check if we need to load a bookmark first
         if (isAuthenticated && user && bookmarkParam) {
           if (bookmarkParam === 'latest') {
-            // Fetch the latest bookmark for this book
-            const { data: bookmarkData, error: bookmarkError } = await getUserBookmarks(user.id, id);
+            // Find the most recent bookmark for this book
+            const sortedBookmarks = [...bookmarks].sort(
+              (a, b) => new Date(b.created_at) - new Date(a.created_at)
+            );
             
-            if (bookmarkError) throw bookmarkError;
-            
-            // If we have bookmarks for this book, get the most recent one
-            if (bookmarkData && bookmarkData.length > 0) {
-              // Sort by creation date, most recent first
-              const sortedBookmarks = bookmarkData.sort(
-                (a, b) => new Date(b.created_at) - new Date(a.created_at)
-              );
-              
-              // Get page number from the most recent bookmark
+            // Get page number from the most recent bookmark
+            if (sortedBookmarks.length > 0) {
               const latestBookmark = sortedBookmarks[0];
               const bookmarkPage = latestBookmark.page_number || 0;
               
@@ -118,24 +133,7 @@ function BookReader() {
               setPage(bookmarkPage);
               
               // Fetch content for the bookmarked page
-              const response = await fetch(`/api/read/${id}?page=${bookmarkPage}`);
-              if (!response.ok) {
-                throw new Error(`Error fetching book: ${response.status}`);
-              }
-              
-              const data = await response.json();
-              if (!data.content || typeof data.content !== 'string') {
-                throw new Error('Invalid content received from the server');
-              }
-              
-              // Set content and other data
-              setContent(data.content);
-              setTotalPages(data.totalPages);
-              
-              // Add to pageContents cache
-              setPageContents({
-                [bookmarkPage]: data.content
-              });
+              await fetchPageContent(bookmarkPage);
               
               // Remove the bookmark param from URL without refreshing the page
               const newUrl = window.location.pathname;
@@ -154,24 +152,7 @@ function BookReader() {
             const pageToLoad = page;
             
             // Fetch content for the specified page
-            const response = await fetch(`/api/read/${id}?page=${pageToLoad}`);
-            if (!response.ok) {
-              throw new Error(`Error fetching book: ${response.status}`);
-            }
-            
-            const data = await response.json();
-            if (!data.content || typeof data.content !== 'string') {
-              throw new Error('Invalid content received from the server');
-            }
-            
-            // Set content and other data
-            setContent(data.content);
-            setTotalPages(data.totalPages);
-            
-            // Add to pageContents cache
-            setPageContents({
-              [pageToLoad]: data.content
-            });
+            await fetchPageContent(pageToLoad);
             
             // Update URL without the bookmark parameter
             const params = new URLSearchParams(location.search);
@@ -192,11 +173,6 @@ function BookReader() {
           await loadFirstPage();
         }
         
-        // Load user bookmarks for this book
-        if (isAuthenticated) {
-          await fetchBookmarks();
-        }
-        
         if (!DEBUG_DISABLE_MUSIC) {
           // Skip music generation for testing
           setLoadingMessage('Generating ambient music...');
@@ -211,7 +187,32 @@ function BookReader() {
     };
     
     initialize();
-  }, [id, isAuthenticated, bookmarkParam, page, location.search]);
+  }, [id, isAuthenticated, user, bookmarkParam, page, location.search]);
+
+  // Helper function to fetch page content
+  const fetchPageContent = async (pageNum) => {
+    const response = await fetch(`/api/read/${id}?page=${pageNum}`);
+    if (!response.ok) {
+      throw new Error(`Error fetching book: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    if (!data.content || typeof data.content !== 'string') {
+      throw new Error('Invalid content received from the server');
+    }
+    
+    // Set content and other data
+    setContent(data.content);
+    setTotalPages(data.totalPages);
+    
+    // Add to pageContents cache
+    setPageContents(prev => ({
+      ...prev,
+      [pageNum]: data.content
+    }));
+    
+    return data;
+  };
 
   // Helper function to load the first page of the book
   const loadFirstPage = async () => {
@@ -1002,393 +1003,184 @@ function BookReader() {
       const dateDisplay = formatBookmarkDate(bookmark.created_at);
       const replacementHtml = `<span class="bookmarked-text" data-bookmark-id="${bookmark.id}" title="Bookmarked on ${dateDisplay}">${bookmark.selected_word}</span>`;
       
-      // Use a regex to replace the word while preserving case
-      const regex = new RegExp(`\\b${bookmark.selected_word}\\b`, 'i');
+      // Use a safer approach to replace the word while preserving case
+      // Escape special regex characters in the selected_word
+      const escapedWord = bookmark.selected_word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`(\\b${escapedWord}\\b)`, 'gi');
       highlightedText = highlightedText.replace(regex, replacementHtml);
     }
     
     return highlightedText;
   };
 
+  // Update content highlighting when content or bookmarks change
+  useEffect(() => {
+    if (content && highlightedBookmarks.length > 0) {
+      contentChangeRef.current = true;
+      const contentElement = contentRef.current;
+      if (contentElement) {
+        // Force re-rendering of highlighted content
+        const highlightedContent = highlightBookmarkedText(content);
+        contentElement.innerHTML = highlightedContent;
+      }
+    }
+  }, [content, highlightedBookmarks]);
+
   if (initialLoading) {
     return (
-      <Backdrop
-        sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1, flexDirection: 'column' }}
-        open={true}
-      >
-        <CircularProgress color="inherit" size={60} />
-        <Typography variant="h6" sx={{ mt: 2 }}>
-          {loadingMessage}
-        </Typography>
-        {loadingProgress > 0 && (
-          <>
+      <Container maxWidth="lg" sx={{ my: 4 }}>
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '70vh'
+        }}>
+          <CircularProgress size={40} />
+          <Typography sx={{ mt: 2 }}>{loadingMessage}</Typography>
+          {loadingProgress > 0 && (
             <Box sx={{ width: '300px', mt: 2 }}>
               <LinearProgress variant="determinate" value={loadingProgress} />
             </Box>
-            <Typography variant="body2" sx={{ mt: 1 }}>
-              {loadingProgress}% complete
-            </Typography>
-          </>
-        )}
-      </Backdrop>
-    );
-  }
-
-  if (loading) {
-    return (
-      <Container sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-        <CircularProgress />
+          )}
+        </Box>
       </Container>
     );
   }
 
   if (error) {
     return (
-      <Container sx={{ mt: 4, px: isMobile ? 2 : 3 }}>
-        <Alert severity="error">{error}</Alert>
-        <Button variant="contained" sx={{ mt: 2 }} onClick={() => navigate('/')}>
-          Return Home
-        </Button>
-        <Button variant="outlined" sx={{ mt: 2, ml: isMobile ? 0 : 2, width: isMobile ? '100%' : 'auto' }} onClick={ensurePageContent}>
-          Retry Loading
-        </Button>
+      <Container maxWidth="lg" sx={{ my: 4 }}>
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {error}
+        </Alert>
       </Container>
     );
   }
 
-  // Guard against empty content
-  if (!content && !loading) {
-    return (
-      <Container sx={{ mt: 4, textAlign: 'center', px: isMobile ? 2 : 3 }}>
-        <Alert severity="warning">No content available for this page.</Alert>
-        <Button variant="contained" sx={{ mt: 2 }} onClick={ensurePageContent}>
-          Retry Loading Content
-        </Button>
-      </Container>
-    );
-  }
-
+  // Main reader view
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100%', mb: 6 }}>
-      <Container sx={{ mt: isMobile ? 1 : 2, pb: isMobile ? 2 : 4, position: 'relative', px: isMobile ? 1 : 3, flex: '1 0 auto' }} maxWidth="lg">
-        {/* Top Control Bar */}
-        <Paper elevation={3} sx={{ mb: isMobile ? 1 : 2 }}>
-          <Toolbar 
-            variant="dense" 
-            sx={{ 
-              display: 'flex', 
-              flexDirection: isMobile ? 'column' : 'row',
-              justifyContent: 'space-between',
-              py: isMobile ? 1 : 0
+    <Container maxWidth="lg" sx={{ my: 4 }}>
+      {/* Navigation controls */}
+      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Button
+          variant="outlined"
+          disabled={page <= 0}
+          onClick={prevPage}
+          startIcon={<ArrowBackIcon />}
+        >
+          Previous
+        </Button>
+        
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Typography variant="body2" sx={{ mr: 1 }}>
+            Page {page + 1} of {totalPages}
+          </Typography>
+          <TextField
+            size="small"
+            value={targetPage}
+            onChange={handleTargetPageChange}
+            onKeyPress={handleKeyPress}
+            sx={{ width: '70px', mx: 1 }}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <Button size="small" onClick={goToPage}>
+                    Go
+                  </Button>
+                </InputAdornment>
+              ),
             }}
-          >
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center',
-              width: isMobile ? '100%' : 'auto',
-              justifyContent: isMobile ? 'center' : 'flex-start',
-              mb: isMobile ? 1 : 0
-            }}>
-              <Tooltip title="Zoom out">
-                <IconButton onClick={zoomOut} disabled={fontSize <= 12} size={isMobile ? 'small' : 'medium'}>
-                  <ZoomOutIcon />
-                </IconButton>
-              </Tooltip>
-              <Typography variant="body2" sx={{ mx: 1 }}>
-                {fontSize}px
-              </Typography>
-              <Tooltip title="Zoom in">
-                <IconButton onClick={zoomIn} disabled={fontSize >= 28} size={isMobile ? 'small' : 'medium'}>
-                  <ZoomInIcon />
-                </IconButton>
-              </Tooltip>
-              
-              {isAuthenticated && (
-                <Tooltip title={hasBookmarkOnCurrentPage() ? "Remove bookmark" : "Add bookmark"}>
-                  <IconButton 
-                    onClick={togglePageBookmark} 
-                    color="primary"
-                    size={isMobile ? 'small' : 'medium'}
-                  >
-                    {hasBookmarkOnCurrentPage() ? <BookmarkIcon /> : <BookmarkBorderIcon />}
-                  </IconButton>
-                </Tooltip>
-              )}
-            </Box>
-            
-            {!isMobile && <Divider orientation="vertical" flexItem />}
-            {isMobile && <Divider sx={{ width: '100%', my: 1 }} />}
-            
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center',
-              flexWrap: isMobile ? 'wrap' : 'nowrap',
-              width: isMobile ? '100%' : 'auto',
-              justifyContent: isMobile ? 'center' : 'flex-start'
-            }}>
-              <Tooltip title={generatingMusic || backgroundGenerating ? "Music generation in progress..." : "Generate ambient music"}>
-                <span>
-                  <IconButton 
-                    onClick={generateMusicForCurrentPage} 
-                    disabled={generatingMusic || !pageContents[page]?.trim()}
-                    color={musicUrl ? "primary" : "default"}
-                    size={isMobile ? 'small' : 'medium'}
-                  >
-                    <MusicNoteIcon />
-                    {(generatingMusic || backgroundGenerating) && (
-                      <CircularProgress
-                        size={isMobile ? 18 : 24}
-                        sx={{
-                          position: 'absolute',
-                          top: '50%',
-                          left: '50%',
-                          marginTop: isMobile ? '-9px' : '-12px',
-                          marginLeft: isMobile ? '-9px' : '-12px',
-                        }}
-                      />
-                    )}
-                  </IconButton>
-                </span>
-              </Tooltip>
-              
-              {musicUrl && (
-                <>
-                  <Tooltip title={isPlaying ? "Pause" : "Play"}>
-                    <IconButton onClick={togglePlay} size={isMobile ? 'small' : 'medium'}>
-                      {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
-                    </IconButton>
-                  </Tooltip>
-                  
-                  <Tooltip title={loopMusic ? "Disable loop" : "Enable loop"}>
-                    <IconButton onClick={toggleLoop} color={loopMusic ? "primary" : "default"} size={isMobile ? 'small' : 'medium'}>
-                      {loopMusic ? <RepeatOneIcon /> : <RepeatIcon />}
-                    </IconButton>
-                  </Tooltip>
-                  
-                  <Tooltip title={isMuted ? "Unmute" : "Mute"}>
-                    <IconButton onClick={toggleMute} size={isMobile ? 'small' : 'medium'}>
-                      {isMuted ? <VolumeMuteIcon /> : <VolumeDownIcon />}
-                    </IconButton>
-                  </Tooltip>
-                  
-                  <Slider
-                    value={volume}
-                    onChange={handleVolumeChange}
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    sx={{ width: isMobile ? 80 : 100, mx: isMobile ? 0.5 : 1 }}
-                    size="small"
-                  />
-                </>
-              )}
-            </Box>
-          </Toolbar>
-        </Paper>
-
-        {/* Music info and controls */}
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, gap: 1 }}>
-          <Tooltip title={musicSource === 'cached' ? "Music loaded from cache" : "Freshly generated music"}>
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-              {musicSource === 'cached' ? "Cached" : "Generated"}
-            </Typography>
+          />
+          <Tooltip title={hasBookmarkOnCurrentPage() ? "Remove bookmark" : "Add bookmark"}>
+            <IconButton onClick={togglePageBookmark} color="primary">
+              {hasBookmarkOnCurrentPage() ? <BookmarkIcon /> : <BookmarkBorderIcon />}
+            </IconButton>
           </Tooltip>
         </Box>
-
-        {/* Content Area */}
-        <Paper sx={{ 
+        
+        <Button
+          variant="outlined"
+          disabled={page >= totalPages - 1}
+          onClick={nextPage}
+          endIcon={<ArrowForwardIcon />}
+        >
+          Next
+        </Button>
+      </Box>
+      
+      {/* Content */}
+      <Paper 
+        elevation={3} 
+        sx={{ 
           p: isMobile ? 2 : 4, 
           minHeight: isMobile ? '60vh' : '70vh',
           borderRadius: isMobile ? 1 : 2,
           position: 'relative'
-        }}>
-          <div className="reader-content" style={{ fontSize: `${fontSize}px` }}>
-            <div 
-              ref={contentRef}
-              className="book-content"
-              style={{ fontSize: `${fontSize}px` }}
-              onMouseUp={handleTextSelection}
-              dangerouslySetInnerHTML={{ 
-                __html: highlightBookmarkedText(content) 
-              }}
-            />
-          </div>
-          
-          {/* Selection Menu */}
-          <Menu
-            open={selectionMenuOpen}
-            onClose={handleSelectionMenuClose}
-            anchorReference="anchorPosition"
-            anchorPosition={
-              selectionPosition.top !== 0 && selectionPosition.left !== 0
-                ? { top: selectionPosition.top, left: selectionPosition.left }
-                : undefined
-            }
-          >
-            <MenuItem onClick={handleBookmarkSelection}>
-              <BookmarkIcon sx={{ mr: 1 }} fontSize="small" /> 
-              Bookmark
-            </MenuItem>
-          </Menu>
-        </Paper>
-
-        {/* Bookmark success/error snackbar */}
-        <Snackbar
-          open={bookmarkSnackbarOpen}
-          autoHideDuration={4000}
-          onClose={() => setBookmarkSnackbarOpen(false)}
-          message={bookmarkMessage}
-        />
-
-        {/* Hidden audio element */}
-        {musicUrl && (
-          <audio 
-            ref={audioRef} 
-            src={musicUrl} 
-            loop={loopMusic}
-            volume={volume} 
-            onEnded={() => !loopMusic && setIsPlaying(false)} 
-          />
-        )}
-
-        {/* Bottom Navigation */}
-        <Paper elevation={3} sx={{ mt: isMobile ? 1 : 2, p: isMobile ? 1 : 2, borderRadius: isMobile ? 1 : 2 }}>
-          <Box sx={{ mb: isMobile ? 1 : 2 }}>
-            <LinearProgress 
-              variant="determinate" 
-              value={(page / (totalPages - 1)) * 100} 
-              sx={{ mb: 1, height: isMobile ? 6 : 8, borderRadius: 4 }}
-            />
-            <Typography variant="caption" color="text.secondary" align="center" display="block">
-              {Math.round((page / (totalPages - 1)) * 100)}% complete
-            </Typography>
-          </Box>
-          
-          <Box sx={{ 
-            display: 'flex', 
-            flexDirection: isMobile ? 'column' : 'row',
-            justifyContent: 'space-between', 
-            alignItems: 'center',
-            gap: isMobile ? 1 : 0
-          }}>
-            <Button 
-              variant="outlined" 
-              onClick={prevPage} 
-              disabled={page === 0}
-              fullWidth={isMobile}
-              size={isMobile ? 'small' : 'medium'}
-            >
-              Previous
-            </Button>
-            
-            <Box sx={{ 
-              display: 'flex', 
-              flexDirection: isMobile ? 'column' : 'row',
-              alignItems: 'center',
-              width: isMobile ? '100%' : 'auto',
-              gap: isMobile ? 1 : 0,
-              my: isMobile ? 1 : 0,
-              justifyContent: 'center'
-            }}>
-              <Typography sx={{ mr: isMobile ? 0 : 1, fontSize: isMobile ? '0.875rem' : '1rem' }}>
-                Page {page + 1} of {totalPages}
-              </Typography>
-              <Stack 
-                direction="row" 
-                spacing={1} 
-                alignItems="center"
-                sx={{ width: isMobile ? '100%' : 'auto' }}
-              >
-                <TextField
-                  size="small"
-                  placeholder="Go to page"
-                  value={targetPage}
-                  onChange={handleTargetPageChange}
-                  onKeyPress={handleKeyPress}
-                  sx={{ 
-                    width: isMobile ? '100%' : 100,
-                    '& .MuiInputBase-input': {
-                      textAlign: 'center',
-                      py: isMobile ? 0.5 : 1
-                    }
-                  }}
-                  inputProps={{ 
-                    'aria-label': 'Go to page'
-                  }}
-                />
-                <Button 
-                  size="small" 
-                  variant="outlined" 
-                  onClick={goToPage}
-                  sx={{ minWidth: isMobile ? '80px' : 'auto' }}
-                >
-                  Go
-                </Button>
-              </Stack>
-            </Box>
-            
-            <Button 
-              variant="outlined" 
-              onClick={nextPage} 
-              disabled={page >= totalPages - 1}
-              fullWidth={isMobile}
-              size={isMobile ? 'small' : 'medium'}
-            >
-              Next
-            </Button>
-          </Box>
-        </Paper>
-
-        {/* Error Alert */}
-        {error && (
-          <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
-        )}
-        
-        {/* Debug info - only for development */}
-        {process.env.NODE_ENV === 'development' && (
-          <Paper sx={{ mt: 2, p: 2, opacity: 0.8 }}>
-            <Typography variant="caption">Debug Info:</Typography>
-            <Typography variant="caption" component="div">
-              Cached Pages: {Object.keys(pageContents).length} | 
-              Cached Music: {Object.keys(cachedMusic).length} | 
-              Queue Size: {nextPagesToGenerate.current.length}
-            </Typography>
-          </Paper>
-        )}
-        
-        {/* Loading backdrop */}
-        <Backdrop
-          sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }}
-          open={initialLoading}
-        >
-          <Box sx={{ textAlign: 'center' }}>
-            <CircularProgress color="inherit" sx={{ mb: 2 }} />
-            <Typography variant="body1">{loadingMessage}</Typography>
-            {loadingProgress > 0 && (
-              <Box sx={{ width: '250px', mt: 2 }}>
-                <LinearProgress variant="determinate" value={loadingProgress} />
-                <Typography variant="caption" sx={{ mt: 1 }}>
-                  {loadingProgress}% complete
-                </Typography>
-              </Box>
-            )}
-          </Box>
-        </Backdrop>
-      </Container>
-      
-      {/* Audio player controls bar */}
-      <AppBar 
-        position="fixed" 
-        color="default" 
-        sx={{ 
-          top: 'auto', 
-          bottom: 0,
-          boxShadow: 3
         }}
       >
-        {/* ... existing AppBar content ... */}
-      </AppBar>
-    </Box>
+        <div className="reader-content">
+          <div 
+            ref={contentRef}
+            className="book-content"
+            style={{ 
+              fontSize: `${fontSize}px`, 
+              whiteSpace: 'pre-line', 
+              lineHeight: 1.6 
+            }}
+            onMouseUp={handleTextSelection}
+            onTouchEnd={handleTextSelection}
+            dangerouslySetInnerHTML={{ 
+              __html: highlightBookmarkedText(content) 
+            }}
+          />
+        </div>
+        
+        {/* Selection Menu */}
+        <Menu
+          open={selectionMenuOpen}
+          onClose={handleSelectionMenuClose}
+          anchorReference="anchorPosition"
+          anchorPosition={
+            selectionMenuOpen
+              ? { top: selectionPosition.top, left: selectionPosition.left }
+              : undefined
+          }
+        >
+          <MenuItem onClick={handleBookmarkSelection}>
+            <ListItemIcon>
+              <BookmarkIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Bookmark Selection</ListItemText>
+          </MenuItem>
+        </Menu>
+      </Paper>
+      
+      {/* Font size controls */}
+      <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center', gap: 2 }}>
+        <Tooltip title="Decrease font size">
+          <IconButton onClick={zoomOut}>
+            <ZoomOutIcon />
+          </IconButton>
+        </Tooltip>
+        <Typography sx={{ display: 'flex', alignItems: 'center' }}>
+          Font Size: {fontSize}px
+        </Typography>
+        <Tooltip title="Increase font size">
+          <IconButton onClick={zoomIn}>
+            <ZoomInIcon />
+          </IconButton>
+        </Tooltip>
+      </Box>
+      
+      {/* Bookmark success/error snackbar */}
+      <Snackbar
+        open={bookmarkSnackbarOpen}
+        autoHideDuration={4000}
+        onClose={() => setBookmarkSnackbarOpen(false)}
+        message={bookmarkMessage}
+      />
+    </Container>
   );
 }
 
