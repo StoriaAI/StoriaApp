@@ -136,7 +136,7 @@ const ContinueReading = () => {
         
         if (error) throw error;
         
-        if (data) {
+        if (data && data.length > 0) {
           // Group bookmarks by book and take the most recent bookmark for each book
           const booksByIdMap = data.reduce((acc, bookmark) => {
             if (!acc[bookmark.book_id] || new Date(bookmark.created_at) > new Date(acc[bookmark.book_id].created_at)) {
@@ -175,11 +175,17 @@ const ContinueReading = () => {
   const navigateToBook = (bookId, option) => {
     handleMenuClose();
     
-    if (option === 'continue') {
-      // Navigate to the reader and open at the bookmark location
-      navigate(`/read/${bookId}?bookmark=latest`);
-    } else {
-      // Navigate to the book details page
+    try {
+      if (option === 'continue') {
+        // Navigate to the reader and open at the bookmark location
+        navigate(`/read/${bookId}?bookmark=latest`);
+      } else {
+        // Navigate to the book details page
+        navigate(`/book/${bookId}`);
+      }
+    } catch (error) {
+      console.error("Navigation error:", error);
+      // Fallback navigation if something fails
       navigate(`/book/${bookId}`);
     }
   };
@@ -214,14 +220,48 @@ const ContinueReading = () => {
       </SectionHeading>
       
       <Grid container spacing={2}>
-        {bookmarks.map((bookmark) => (
-          <Grid item xs={6} sm={4} md={2} key={bookmark.id}>
+        {bookmarks.map((bookmark, index) => (
+          <Grid item xs={6} sm={4} md={2} key={bookmark.id || index}>
             <BookCard onClick={(e) => handleBookClick(bookmark, e)}>
               <Box sx={{ position: 'relative' }}>
-                <BookCover 
-                  image={bookmark.formats?.['image/jpeg'] || `https://via.placeholder.com/150x225?text=${encodeURIComponent(bookmark.book_title || 'Book')}`} 
-                  title={bookmark.book_title}
-                />
+                <Box
+                  component="div"
+                  sx={{
+                    height: 0,
+                    paddingTop: '150%',
+                    borderRadius: theme.spacing(1),
+                    boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
+                    position: 'relative',
+                    backgroundImage: 'url(/placeholder-cover.jpg)',
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  {bookmark.book_title && (
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        padding: '8px',
+                        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                        color: 'white',
+                        textAlign: 'center',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                    >
+                      {bookmark.book_title}
+                    </Typography>
+                  )}
+                </Box>
                 <BookmarkBadge>
                   <BookmarkIcon />
                 </BookmarkBadge>

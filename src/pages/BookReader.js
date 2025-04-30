@@ -104,74 +104,76 @@ function BookReader() {
       
       try {
         // First, fetch user bookmarks regardless of the bookmark parameter
-        // This ensures we have all bookmarks for highlighting
         if (isAuthenticated && user) {
-          const { data: bookmarkData, error: bookmarkError } = await getUserBookmarks(user.id, id);
-          
-          if (bookmarkError) {
-            console.error('Error fetching bookmarks:', bookmarkError);
-          } else if (bookmarkData) {
-            setBookmarks(bookmarkData);
-            setHighlightedBookmarks(bookmarkData.filter(bookmark => bookmark.selected_word));
+          try {
+            const { data: bookmarkData, error: bookmarkError } = await getUserBookmarks(user.id, id);
+            
+            if (bookmarkError) {
+              console.error('Error fetching bookmarks:', bookmarkError);
+            } else if (bookmarkData && Array.isArray(bookmarkData)) {
+              setBookmarks(bookmarkData);
+              setHighlightedBookmarks(bookmarkData.filter(bookmark => bookmark.selected_word));
+              
+              // Handle bookmark parameter now that we have the bookmarks
+              if (bookmarkParam === 'latest' && bookmarkData.length > 0) {
+                // Find the most recent bookmark for this book
+                const sortedBookmarks = [...bookmarkData].sort(
+                  (a, b) => new Date(b.created_at) - new Date(a.created_at)
+                );
+                
+                if (sortedBookmarks.length > 0) {
+                  const latestBookmark = sortedBookmarks[0];
+                  const bookmarkPage = latestBookmark.page_number || 0;
+                  
+                  // Set the page to the bookmarked page
+                  setPage(bookmarkPage);
+                  
+                  // Fetch content for the bookmarked page
+                  await fetchPageContent(bookmarkPage);
+                  
+                  // Remove the bookmark param from URL without refreshing the page
+                  const newUrl = window.location.pathname;
+                  window.history.replaceState({}, document.title, newUrl);
+                  
+                  // Show notification about bookmark
+                  setBookmarkMessage(`Resumed reading from page ${bookmarkPage + 1}`);
+                  setBookmarkSnackbarOpen(true);
+                  
+                  // Skip loading first page since we've loaded the bookmark page
+                  setInitialLoading(false);
+                  return;
+                }
+              } else if (bookmarkParam === 'true' && page) {
+                // This is for a specific page bookmark
+                const pageToLoad = page;
+                
+                // Fetch content for the specified page
+                await fetchPageContent(pageToLoad);
+                
+                // Update URL without the bookmark parameter
+                const params = new URLSearchParams(location.search);
+                params.delete('bookmark');
+                params.set('page', pageToLoad.toString());
+                const newUrl = `${window.location.pathname}?${params.toString()}`;
+                window.history.replaceState({}, document.title, newUrl);
+                
+                // Show notification about bookmark
+                setBookmarkMessage(`Opened page ${pageToLoad + 1}`);
+                setBookmarkSnackbarOpen(true);
+                
+                // Skip loading first page since we've loaded the bookmark page
+                setInitialLoading(false);
+                return;
+              }
+            }
+          } catch (err) {
+            console.error('Error during bookmark handling:', err);
+            // Continue to load the first page
           }
         }
         
-        // Check if we need to load a bookmark first
-        if (isAuthenticated && user && bookmarkParam) {
-          if (bookmarkParam === 'latest') {
-            // Find the most recent bookmark for this book
-            const sortedBookmarks = [...bookmarks].sort(
-              (a, b) => new Date(b.created_at) - new Date(a.created_at)
-            );
-            
-            // Get page number from the most recent bookmark
-            if (sortedBookmarks.length > 0) {
-              const latestBookmark = sortedBookmarks[0];
-              const bookmarkPage = latestBookmark.page_number || 0;
-              
-              // Set the page to the bookmarked page
-              setPage(bookmarkPage);
-              
-              // Fetch content for the bookmarked page
-              await fetchPageContent(bookmarkPage);
-              
-              // Remove the bookmark param from URL without refreshing the page
-              const newUrl = window.location.pathname;
-              window.history.replaceState({}, document.title, newUrl);
-              
-              // Show notification about bookmark
-              setBookmarkMessage(`Resumed reading from page ${bookmarkPage + 1}`);
-              setBookmarkSnackbarOpen(true);
-            } else {
-              // No bookmarks found, load first page
-              await loadFirstPage();
-            }
-          } else if (bookmarkParam === 'true' && page) {
-            // This is for a specific page bookmark - page is already set from URL
-            // Just load the page content
-            const pageToLoad = page;
-            
-            // Fetch content for the specified page
-            await fetchPageContent(pageToLoad);
-            
-            // Update URL without the bookmark parameter
-            const params = new URLSearchParams(location.search);
-            params.delete('bookmark');
-            params.set('page', pageToLoad.toString());
-            const newUrl = `${window.location.pathname}?${params.toString()}`;
-            window.history.replaceState({}, document.title, newUrl);
-            
-            // Show notification about bookmark
-            setBookmarkMessage(`Opened page ${pageToLoad + 1}`);
-            setBookmarkSnackbarOpen(true);
-          } else {
-            // Unknown bookmark parameter, load first page
-            await loadFirstPage();
-          }
-        } else {
-          // No bookmark param, load first page or use specific page from URL
-          await loadFirstPage();
-        }
+        // Fall back to loading the first page if bookmark navigation fails or isn't requested
+        await loadFirstPage();
         
         if (!DEBUG_DISABLE_MUSIC) {
           // Skip music generation for testing
@@ -987,30 +989,35 @@ function BookReader() {
 
   // Function to highlight bookmarked text in content
   const highlightBookmarkedText = (text) => {
-    if (!text || highlightedBookmarks.length === 0) return text;
+    if (!text || !highlightedBookmarks || highlightedBookmarks.length === 0) return text;
     
     let highlightedText = text;
     
-    // Sort bookmarks by word length (longest first) to avoid nested highlights
-    const sortedBookmarks = [...highlightedBookmarks].sort((a, b) => 
-      (b.selected_word?.length || 0) - (a.selected_word?.length || 0)
-    );
-    
-    for (const bookmark of sortedBookmarks) {
-      if (!bookmark.selected_word) continue;
+    try {
+      // Sort bookmarks by word length (longest first) to avoid nested highlights
+      const sortedBookmarks = [...highlightedBookmarks]
+        .filter(bookmark => bookmark && bookmark.selected_word && bookmark.selected_word.length > 0)
+        .sort((a, b) => (b.selected_word?.length || 0) - (a.selected_word?.length || 0));
       
-      // Create a marker with the bookmark's timestamp as tooltip
-      const dateDisplay = formatBookmarkDate(bookmark.created_at);
-      const replacementHtml = `<span class="bookmarked-text" data-bookmark-id="${bookmark.id}" title="Bookmarked on ${dateDisplay}">${bookmark.selected_word}</span>`;
+      for (const bookmark of sortedBookmarks) {
+        if (!bookmark.selected_word) continue;
+        
+        // Create a marker with the bookmark's timestamp as tooltip
+        const dateDisplay = formatBookmarkDate(bookmark.created_at);
+        const replacementHtml = `<span class="bookmarked-text" data-bookmark-id="${bookmark.id}" title="Bookmarked on ${dateDisplay}">${bookmark.selected_word}</span>`;
+        
+        // Use a safer approach to replace the word while preserving case
+        // Escape special regex characters in the selected_word
+        const escapedWord = bookmark.selected_word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`(\\b${escapedWord}\\b)`, 'gi');
+        highlightedText = highlightedText.replace(regex, replacementHtml);
+      }
       
-      // Use a safer approach to replace the word while preserving case
-      // Escape special regex characters in the selected_word
-      const escapedWord = bookmark.selected_word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(`(\\b${escapedWord}\\b)`, 'gi');
-      highlightedText = highlightedText.replace(regex, replacementHtml);
+      return highlightedText;
+    } catch (err) {
+      console.error('Error highlighting text:', err);
+      return text; // Return original text if highlighting fails
     }
-    
-    return highlightedText;
   };
 
   // Update content highlighting when content or bookmarks change

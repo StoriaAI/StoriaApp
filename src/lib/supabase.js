@@ -503,22 +503,37 @@ export const getUserBookmarks = async (userId, bookId = null) => {
       // Create an object to store book details
       const bookDetails = {};
       
-      // Fetch details for each book
+      // Fetch details for each book with better error handling
       for (const id of bookIds) {
         try {
-          const response = await fetch(`/api/books?id=${id}`);
-          if (response.ok) {
+          // Try to use a cached version first - Set a short timeout for the fetch to avoid long waiting
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);  // 5 second timeout
+          
+          const response = await fetch(`/api/books?id=${id}`, {
+            signal: controller.signal
+          }).catch(err => {
+            console.log(`Network error fetching book ${id}:`, err);
+            return null;
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (response && response.ok) {
             const book = await response.json();
             if (book && book.title) {
               bookDetails[id] = book;
             }
+          } else {
+            console.warn(`Failed to fetch details for book ${id}, status: ${response?.status}`);
           }
         } catch (err) {
           console.error(`Error fetching details for book ${id}:`, err);
+          // Continue with other books instead of failing completely
         }
       }
       
-      // Enhance bookmark data with book details
+      // Enhance bookmark data with book details, using fallbacks when needed
       const enhancedData = data.map(bookmark => {
         const bookDetail = bookDetails[bookmark.book_id];
         if (bookDetail) {
@@ -529,7 +544,13 @@ export const getUserBookmarks = async (userId, bookId = null) => {
             authors: bookDetail.authors || []
           };
         }
-        return bookmark;
+        // Return the bookmark with default values for missing book details
+        return {
+          ...bookmark,
+          book_title: bookmark.book_title || `Book ${bookmark.book_id}`,
+          formats: {},
+          authors: []
+        };
       });
       
       return { data: enhancedData, error: null };
@@ -538,7 +559,8 @@ export const getUserBookmarks = async (userId, bookId = null) => {
     return { data, error };
   } catch (err) {
     console.error('Error getting bookmarks:', err);
-    return { data: null, error: err };
+    // Return empty array instead of null to prevent errors
+    return { data: [], error: err };
   }
 };
 
