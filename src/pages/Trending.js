@@ -194,6 +194,10 @@ const FEATURED_GENRES = [
   }
 ];
 
+// Add cache constants 
+const LOCAL_STORAGE_PREFIX = 'storia_cache_';
+const CLIENT_CACHE_TTL = 60 * 60 * 1000; // 1 hour in milliseconds
+
 function Trending() {
   const [genreBooks, setGenreBooks] = useState({});
   const [loading, setLoading] = useState({});
@@ -226,6 +230,27 @@ function Trending() {
       try {
         console.log("Starting to load all genres simultaneously");
         
+        // Check client-side cache first
+        const cachedGenres = loadCachedGenres();
+        if (cachedGenres) {
+          console.log("Loaded genres from client-side cache");
+          setGenreBooks(cachedGenres);
+          
+          // Mark all genres as loaded
+          const loadedState = {};
+          FEATURED_GENRES.forEach(genre => {
+            loadedState[genre.name] = false;
+          });
+          setLoading(loadedState);
+          
+          // Refresh cache in background
+          setTimeout(() => {
+            refreshGenres(cachedGenres);
+          }, 100);
+          
+          return;
+        }
+        
         // Create an array of fetch promises for all genres
         const fetchPromises = FEATURED_GENRES.map(genre => {
           console.log(`Creating fetch promise for genre: ${genre.name}`);
@@ -236,6 +261,9 @@ function Trending() {
         await Promise.all(fetchPromises);
         console.log(`All genres loaded successfully`);
         
+        // Save to client-side cache
+        saveToCache();
+        
       } catch (error) {
         console.error('Error loading all genres:', error);
       }
@@ -245,19 +273,91 @@ function Trending() {
     loadAllGenres();
   }, []);
 
+  // Refresh genre data in background using cached data as fallback
+  const refreshGenres = async (cachedData) => {
+    try {
+      console.log("Refreshing genre data in background");
+      
+      // Create an array of fetch promises for all genres
+      const fetchPromises = FEATURED_GENRES.map(genre => {
+        return fetchGenreBooks(genre, true);
+      });
+      
+      // Wait for all fetches to complete concurrently
+      await Promise.all(fetchPromises);
+      
+      // Save updated data to cache
+      saveToCache();
+      
+    } catch (error) {
+      console.error('Error refreshing genres:', error);
+    }
+  };
+  
+  // Load cached genres from localStorage
+  const loadCachedGenres = () => {
+    try {
+      // Try to get cache data from localStorage
+      const cacheKey = `${LOCAL_STORAGE_PREFIX}trending_genres`;
+      const cachedData = localStorage.getItem(cacheKey);
+      
+      if (!cachedData) {
+        return null;
+      }
+      
+      const { timestamp, data } = JSON.parse(cachedData);
+      
+      // Check if cache is expired
+      if (Date.now() - timestamp > CLIENT_CACHE_TTL) {
+        console.log("Cache expired, will fetch fresh data");
+        localStorage.removeItem(cacheKey);
+        return null;
+      }
+      
+      // Validate cache data
+      if (!data || typeof data !== 'object') {
+        return null;
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error loading from cache:', error);
+      return null;
+    }
+  };
+  
+  // Save current genres to localStorage
+  const saveToCache = () => {
+    try {
+      const cacheKey = `${LOCAL_STORAGE_PREFIX}trending_genres`;
+      const cacheData = {
+        timestamp: Date.now(),
+        data: genreBooks
+      };
+      
+      localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+      console.log("Saved genre data to client-side cache");
+    } catch (error) {
+      console.error('Error saving to cache:', error);
+    }
+  };
+
   // Fetch books for a specific genre
-  const fetchGenreBooks = async (genre) => {
-    // Return cached data if available
-    if (genreBooks[genre.name]?.length > 0) {
+  const fetchGenreBooks = async (genre, isBackgroundRefresh = false) => {
+    // Return cached data if available and not doing a background refresh
+    if (!isBackgroundRefresh && genreBooks[genre.name]?.length > 0) {
       console.log(`Using cached data for ${genre.name}`);
       return genreBooks[genre.name];
     }
 
     try {
       console.log(`Starting fetch for ${genre.name} books`);
-      // Set loading state
-      setLoading(prev => ({ ...prev, [genre.name]: true }));
-      setError(prev => ({ ...prev, [genre.name]: null }));
+      
+      // Only update loading state if not a background refresh
+      if (!isBackgroundRefresh) {
+        setLoading(prev => ({ ...prev, [genre.name]: true }));
+        setError(prev => ({ ...prev, [genre.name]: null }));
+      }
       
       // Build API URL
       const apiUrl = `/api/books?search=${encodeURIComponent(genre.searchTerm)}&page=1`;
@@ -306,13 +406,21 @@ function Trending() {
       
     } catch (error) {
       console.error(`Error fetching ${genre.name} books:`, error);
-      setError(prev => ({
-        ...prev,
-        [genre.name]: `Failed to load ${genre.name} books: ${error.message}`
-      }));
+      
+      // Only update error state if not a background refresh
+      if (!isBackgroundRefresh) {
+        setError(prev => ({
+          ...prev,
+          [genre.name]: `Failed to load ${genre.name} books: ${error.message}`
+        }));
+      }
+      
       return [];
     } finally {
-      setLoading(prev => ({ ...prev, [genre.name]: false }));
+      // Only update loading state if not a background refresh
+      if (!isBackgroundRefresh) {
+        setLoading(prev => ({ ...prev, [genre.name]: false }));
+      }
     }
   };
 

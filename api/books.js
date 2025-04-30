@@ -1,10 +1,29 @@
 require('dotenv').config();
 const axios = require('axios');
+const cache = require('../utils/cache');
+
+// Cache TTL values (in seconds)
+const SEARCH_CACHE_TTL = process.env.SEARCH_CACHE_TTL || 3600; // 1 hour
+const BOOK_CACHE_TTL = process.env.BOOK_CACHE_TTL || 86400; // 24 hours
 
 // Helper: Get book details from Gutendex by ID
 async function getBookById(bookId) {
   try {
+    // Check cache first
+    const cacheKey = `book:${bookId}`;
+    const cachedBook = await cache.get(cacheKey);
+    
+    if (cachedBook) {
+      console.log(`Cache hit for book ${bookId}`);
+      return cachedBook;
+    }
+    
+    console.log(`Cache miss for book ${bookId}, fetching from API`);
     const response = await axios.get(`https://gutendex.com/books/${bookId}`);
+    
+    // Cache the result with longer TTL since book data rarely changes
+    await cache.set(cacheKey, response.data, BOOK_CACHE_TTL);
+    
     return response.data;
   } catch (error) {
     console.error(`Error fetching book ${bookId}:`, error.message);
@@ -45,11 +64,22 @@ module.exports = async (req, res) => {
       if (page) params.append('page', page);
     }
 
+    // Generate cache key based on query parameters
+    const queryString = params.toString();
+    const cacheKey = `books:${queryString}`;
+    
+    // Check cache first
+    const cachedData = await cache.get(cacheKey);
+    if (cachedData) {
+      console.log(`Cache hit for query: ${queryString}`);
+      return res.status(200).json(cachedData);
+    }
+    
     // Log the request details
-    console.log(`Fetching books from: ${baseUrl}?${params.toString()}`);
+    console.log(`Cache miss. Fetching books from: ${baseUrl}?${queryString}`);
 
     // Make request to Gutenberg API
-    const response = await axios.get(`${baseUrl}?${params.toString()}`, {
+    const response = await axios.get(`${baseUrl}?${queryString}`, {
       headers: {
         'Accept': 'application/json',
         'User-Agent': 'Storia/1.0'
@@ -135,13 +165,21 @@ module.exports = async (req, res) => {
         };
       });
 
-    // Return the results with standard format
-    res.status(200).json({
+    // Format the response data
+    const responseData = {
       count: response.data.count,
       next: response.data.next,
       previous: response.data.previous,
       results: transformedResults
-    });
+    };
+    
+    // Cache the transformed response
+    // Use shorter TTL for search results, longer for specific book lookups
+    const ttl = id ? BOOK_CACHE_TTL : SEARCH_CACHE_TTL;
+    await cache.set(cacheKey, responseData, ttl);
+    
+    // Return the results
+    res.status(200).json(responseData);
   } catch (error) {
     console.error('Error fetching books:', error.message);
     

@@ -72,6 +72,10 @@ const SearchInput = styled(TextField)(({ theme }) => ({
   },
 }));
 
+// Add cache constants 
+const LOCAL_STORAGE_PREFIX = 'storia_cache_';
+const SEARCH_CACHE_TTL = 30 * 60 * 1000; // 30 minutes in milliseconds
+
 function Search() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -94,6 +98,33 @@ function Search() {
       try {
         setLoading(true);
         setError(null);
+        
+        // Generate cache key for this search
+        const cacheKey = `${LOCAL_STORAGE_PREFIX}search_${query}_page${page}`;
+        
+        // Try to get from cache first
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+          const { timestamp, data, totalPages: cachedTotalPages } = JSON.parse(cachedData);
+          
+          // Check if cache is still valid
+          if (Date.now() - timestamp < SEARCH_CACHE_TTL) {
+            console.log(`Using cached search results for "${query}" page ${page}`);
+            setBooks(data);
+            setTotalPages(cachedTotalPages);
+            setLoading(false);
+            
+            // Refresh cache in background after a short delay
+            setTimeout(() => {
+              refreshSearchResults(query, page, cacheKey);
+            }, 100);
+            
+            return;
+          } else {
+            console.log(`Cache expired for "${query}" page ${page}, fetching fresh data`);
+            localStorage.removeItem(cacheKey);
+          }
+        }
         
         let apiUrl = `/api/books?search=${encodeURIComponent(query)}&page=${page}`;
         console.log(`Searching for books: ${apiUrl}`);
@@ -123,7 +154,20 @@ function Search() {
         // Calculate total pages - assume 32 items per page from Gutenberg API
         const totalItems = data.count;
         const itemsPerPage = 32;
-        setTotalPages(Math.ceil(totalItems / itemsPerPage));
+        const calculatedTotalPages = Math.ceil(totalItems / itemsPerPage);
+        setTotalPages(calculatedTotalPages);
+        
+        // Save to cache
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({
+            timestamp: Date.now(),
+            data: data.results,
+            totalPages: calculatedTotalPages
+          }));
+          console.log(`Cached search results for "${query}" page ${page}`);
+        } catch (cacheError) {
+          console.error('Error caching search results:', cacheError);
+        }
         
       } catch (error) {
         console.error('Search error:', error);
@@ -136,6 +180,50 @@ function Search() {
     
     fetchBooks();
   }, [query, page]);
+  
+  // Refresh search results in background
+  const refreshSearchResults = async (query, page, cacheKey) => {
+    try {
+      console.log(`Background refresh for "${query}" page ${page}`);
+      
+      let apiUrl = `/api/books?search=${encodeURIComponent(query)}&page=${page}`;
+      let response = await fetch(apiUrl);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!data.results || !Array.isArray(data.results)) {
+        throw new Error('Invalid data format received from server');
+      }
+      
+      // Only update if we're still on the same search/page
+      const currentQuery = new URLSearchParams(location.search).get('query') || '';
+      const currentPage = page;
+      
+      if (currentQuery === query && currentPage === page) {
+        setBooks(data.results);
+        
+        // Calculate total pages
+        const totalItems = data.count;
+        const itemsPerPage = 32;
+        const calculatedTotalPages = Math.ceil(totalItems / itemsPerPage);
+        setTotalPages(calculatedTotalPages);
+      }
+      
+      // Update cache
+      localStorage.setItem(cacheKey, JSON.stringify({
+        timestamp: Date.now(),
+        data: data.results,
+        totalPages: calculatedTotalPages
+      }));
+      
+    } catch (error) {
+      console.error('Background refresh error:', error);
+    }
+  };
 
   const handleSearch = (e) => {
     e.preventDefault();

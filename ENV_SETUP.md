@@ -26,6 +26,13 @@ OPENAI_API_ENDPOINT=https://api.openai.com/v1/chat/completions
 # Project Gutenberg API
 GUTENBERG_API_ENDPOINT=https://gutendex.com/
 
+# Cache Configuration
+CACHE_TTL=3600                # Default cache TTL in seconds (1 hour)
+SEARCH_CACHE_TTL=1800         # Search results cache TTL in seconds (30 minutes)
+BOOK_CACHE_TTL=86400          # Book data cache TTL in seconds (24 hours)
+USE_REDIS=false               # Set to true to use Redis for caching instead of in-memory cache
+# REDIS_URL=redis://localhost:6379  # Redis connection URL (only needed if USE_REDIS=true)
+
 # Server Configuration
 PORT=3001
 NODE_ENV=development 

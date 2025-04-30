@@ -110,6 +110,10 @@ const bookCategories = [
   'Philosophy'
 ];
 
+// Add cache constants
+const LOCAL_STORAGE_PREFIX = 'storia_cache_';
+const CATEGORY_CACHE_TTL = 60 * 60 * 1000; // 1 hour in milliseconds
+
 function Home() {
   const [books, setBooks] = useState({});
   const [search, setSearch] = useState('');
@@ -122,9 +126,41 @@ function Home() {
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
 
   // Fetch books for a specific category
-  const fetchCategoryBooks = async (category) => {
+  const fetchCategoryBooks = async (category, isBackgroundRefresh = false) => {
     try {
-      setLoadingCategories(prev => ({ ...prev, [category]: true }));
+      // Only show loading state if not a background refresh
+      if (!isBackgroundRefresh) {
+        setLoadingCategories(prev => ({ ...prev, [category]: true }));
+      }
+      
+      // Check localStorage cache first
+      const cacheKey = `${LOCAL_STORAGE_PREFIX}category_${category}`;
+      if (!isBackgroundRefresh) {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+          const { timestamp, data } = JSON.parse(cachedData);
+          
+          // Check if cache is still valid
+          if (Date.now() - timestamp < CATEGORY_CACHE_TTL) {
+            console.log(`Using cached category data for ${category}`);
+            setBooks(prev => ({
+              ...prev,
+              [category]: data
+            }));
+            setLoadingCategories(prev => ({ ...prev, [category]: false }));
+            
+            // Refresh in background
+            setTimeout(() => {
+              fetchCategoryBooks(category, true);
+            }, 100);
+            
+            return data;
+          } else {
+            console.log(`Cache expired for ${category}, fetching fresh data`);
+            localStorage.removeItem(cacheKey);
+          }
+        }
+      }
       
       // Use simple search terms for better Gutenberg results
       let searchTerm = category.toLowerCase();
@@ -151,28 +187,128 @@ function Home() {
       );
       
       // Take only a few books to avoid layout issues
-      setBooks(prev => ({
-        ...prev,
-        [category]: validResults.slice(0, 4)
-      }));
+      const categoryBooks = validResults.slice(0, 4);
+      
+      // Update state (only if not background refresh or if we're still showing this category)
+      if (!isBackgroundRefresh) {
+        setBooks(prev => ({
+          ...prev,
+          [category]: categoryBooks
+        }));
+      } else {
+        // For background refresh, check if we have this category before updating
+        setBooks(prev => {
+          if (prev[category]) {
+            return {
+              ...prev,
+              [category]: categoryBooks
+            };
+          }
+          return prev;
+        });
+      }
+      
+      // Update cache
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify({
+          timestamp: Date.now(),
+          data: categoryBooks
+        }));
+        console.log(`Cached category data for ${category}`);
+      } catch (cacheError) {
+        console.error('Error caching category data:', cacheError);
+      }
+      
+      return categoryBooks;
       
     } catch (error) {
       console.error(`Error fetching ${category} books:`, error);
-      // Don't use fallbacks - show error state directly
-      setBooks(prev => ({
-        ...prev,
-        [category]: []
-      }));
+      
+      // Only update error state if not a background refresh
+      if (!isBackgroundRefresh) {
+        // Don't use fallbacks - show error state directly
+        setBooks(prev => ({
+          ...prev,
+          [category]: []
+        }));
+      }
+      
+      return [];
     } finally {
-      setLoadingCategories(prev => ({ ...prev, [category]: false }));
+      if (!isBackgroundRefresh) {
+        setLoadingCategories(prev => ({ ...prev, [category]: false }));
+      }
     }
   };
 
+  // Load cached categories on initial render
   useEffect(() => {
-    // Fetch all categories at once when component mounts
-    bookCategories.forEach(category => {
-      fetchCategoryBooks(category);
-    });
+    // Initialize categories with cached data if available
+    const loadCachedCategories = () => {
+      let hasCachedData = false;
+      const initialCategoryState = {};
+      
+      bookCategories.forEach(category => {
+        const cacheKey = `${LOCAL_STORAGE_PREFIX}category_${category}`;
+        const cachedData = localStorage.getItem(cacheKey);
+        
+        if (cachedData) {
+          try {
+            const { timestamp, data } = JSON.parse(cachedData);
+            
+            if (Date.now() - timestamp < CATEGORY_CACHE_TTL) {
+              initialCategoryState[category] = data;
+              hasCachedData = true;
+            } else {
+              localStorage.removeItem(cacheKey);
+            }
+          } catch (error) {
+            console.error(`Error parsing cached data for ${category}:`, error);
+          }
+        }
+      });
+      
+      if (hasCachedData) {
+        setBooks(initialCategoryState);
+        
+        // Mark all cached categories as loaded
+        const loadingState = {};
+        bookCategories.forEach(category => {
+          loadingState[category] = !initialCategoryState[category];
+        });
+        setLoadingCategories(loadingState);
+      }
+      
+      return hasCachedData;
+    };
+    
+    // Try to load from cache first
+    const hasCachedData = loadCachedCategories();
+    
+    // Fetch all categories
+    const fetchAllCategories = async () => {
+      // For categories that weren't cached
+      const missingCategories = bookCategories.filter(category => !books[category]);
+      
+      if (missingCategories.length > 0) {
+        console.log(`Fetching ${missingCategories.length} missing categories`);
+        
+        // Fetch missing categories
+        await Promise.all(missingCategories.map(category => fetchCategoryBooks(category)));
+      }
+      
+      // Refresh cached categories in background
+      if (hasCachedData) {
+        setTimeout(() => {
+          const cachedCategories = bookCategories.filter(category => books[category]);
+          cachedCategories.forEach(category => {
+            fetchCategoryBooks(category, true);
+          });
+        }, 1000); // Wait a second before refreshing
+      }
+    };
+    
+    fetchAllCategories();
   }, []);
 
   const handleSearch = (e) => {
