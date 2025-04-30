@@ -40,10 +40,10 @@ NODE_ENV=development
 # OpenAI System Prompt for Music Generation - Important for non-vocal ambient music
 OPENAI_SYSTEM_PROMPT="You are an expert at analyzing text and extracting emotional mood and setting details. Create a concise prompt (max 50 words) for generating INSTRUMENTAL background ambiance music that matches the emotional mood and setting of the text. Focus on: the dominant emotional mood (e.g., joyful, tense, melancholic), the setting or environment, and key ambient elements. IMPORTANT: Specify NO VOCALS, INSTRUMENTAL ONLY, background/ambient sound only."
 
-# Supabase Configuration - Important for authentication
+# Supabase Configuration - Important for authentication and music caching
 REACT_APP_SUPABASE_URL=https://your-project-ref.supabase.co
 REACT_APP_SUPABASE_PUBLIC_KEY=your_supabase_anon_key
-SUPABASE_SERVICE_ROLE=your_supabase_service_role_key
+SUPABASE_SERVICE_ROLE=your_supabase_service_role_key # Required for music caching in Supabase storage
 JWT_SECRET=your_jwt_secret
 
 # Vercel specific settings

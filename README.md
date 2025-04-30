@@ -9,6 +9,7 @@ StoriaApp is an interactive book reader application that enhances reading by gen
 - AI-generated background music that matches the mood and setting of each page
 - Music plays continuously with seamless transitions between pages
 - Background generation of music for upcoming pages
+- Supabase-based music caching for faster loading and reduced API usage
 - Mobile-responsive design
 
 ## Tech Stack

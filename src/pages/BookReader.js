@@ -77,6 +77,7 @@ function BookReader() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const [musicSource, setMusicSource] = useState('generated');
 
   // Add a specific debug flag to disable music to ensure reading works properly
   const DEBUG_DISABLE_MUSIC = true; // Set to false if you want to enable music again
@@ -529,13 +530,16 @@ function BookReader() {
         throw new Error('No music URL returned from server');
       }
       
+      // Set the music source based on whether it was cached
+      setMusicSource(data.cached ? 'cached' : 'generated');
+      
       // Cache the music URL
       setCachedMusic(prev => ({
         ...prev,
         [pageNum]: data.musicUrl
       }));
       
-      console.log(`Music URL generated for page ${pageNum}`);
+      console.log(`Music URL ${data.cached ? 'retrieved from cache' : 'generated'} for page ${pageNum}`);
       
       // If this is the current page and we don't have music playing yet, set it
       if (pageNum === page) {
@@ -1039,6 +1043,15 @@ function BookReader() {
             </Box>
           </Toolbar>
         </Paper>
+
+        {/* Music info and controls */}
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, gap: 1 }}>
+          <Tooltip title={musicSource === 'cached' ? "Music loaded from cache" : "Freshly generated music"}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+              {musicSource === 'cached' ? "Cached" : "Generated"}
+            </Typography>
+          </Tooltip>
+        </Box>
 
         {/* Content Area */}
         <Paper sx={{ 
