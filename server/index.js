@@ -2,12 +2,16 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
+const adminRoutes = require('./adminAuth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Admin routes
+app.use('/api/admin', adminRoutes);
 
 // Helper: Get book details from Gutendex by ID
 async function getBookById(bookId) {

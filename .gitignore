@@ -139,3 +139,4 @@ __pycache__/
 *.pyd
 *.pyw
 .vercel
+.cursor/rules/env-rule.mdc

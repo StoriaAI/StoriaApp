@@ -18,12 +18,16 @@ import Trending from './pages/Trending';
 import Pricing from './pages/Pricing';
 import Settings from './pages/Settings';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AdminAuthProvider } from './contexts/AdminAuthContext';
 import { CircularProgress, Box } from '@mui/material';
 import { supabase } from './lib/supabase';
 import { debugAuth, handleHashRedirect } from './util/debugAuth';
 import { debugOAuthRedirects, fixOAuthRedirectIssues } from './util/debugOAuth';
 import AuthCallback from './components/auth/AuthCallback';
 import AuthStatus from './pages/Auth/AuthStatus';
+import AdminLogin from './pages/Auth/AdminLogin';
+import Dashboard from './pages/Admin/Dashboard';
+import ProtectedAdminRoute from './components/admin/ProtectedAdminRoute';
 
 // Create a base theme with dark mode settings
 let theme = createTheme({
@@ -248,81 +252,36 @@ const AppContent = () => {
   if (loading) return <LoadingScreen />;
 
   return (
-    <Box sx={{ 
-      display: 'flex', 
-      flexDirection: 'column', 
-      minHeight: '100vh' 
-    }}>
-      <HandleOAuthRedirect />
+    <>
       <Navbar />
-      <Box sx={{ flex: 1 }}>
-        <Routes>
-          {/* Auth Routes - Place these first to ensure they are prioritized */}
-          <Route path="/auth/callback" element={<AuthCallback />} />
-          <Route path="/auth/v2/callback" element={<AuthCallback />} />
-          <Route path="/auth/status" element={<AuthStatus />} />
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/contact" element={<Contact />} />
+        <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+        <Route path="/signup" element={<PublicRoute><SignUp /></PublicRoute>} />
+        <Route path="/search" element={<Search />} />
+        <Route path="/trending" element={<Trending />} />
+        <Route path="/pricing" element={<Pricing />} />
+        <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+        <Route path="/books/:id" element={<BookDetail />} />
+        <Route path="/read/:id" element={<ProtectedRoute><BookReader /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/profile-setup" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/auth/v2/callback" element={<AuthCallback />} />
+        <Route path="/auth/status" element={<AuthStatus />} />
         
-          {/* Public Routes */}
-          <Route path="/" element={<Home />} />
-          <Route 
-            path="/login" 
-            element={
-              <PublicRoute>
-                <Login />
-              </PublicRoute>
-            } 
-          />
-          <Route 
-            path="/signup" 
-            element={
-              <PublicRoute>
-                <SignUp />
-              </PublicRoute>
-            } 
-          />
-          
-          {/* Book Routes - Order matters: more specific routes first */}
-          <Route path="/book/read/:id" element={<BookReader />} />
-          <Route path="/book/:id" element={<BookDetail />} />
-          
-          <Route path="/about" element={<About />} />
-          <Route path="/contact" element={<Contact />} />
-          <Route path="/pricing" element={<Pricing />} />
-          <Route path="/trending" element={<Trending />} />
-          <Route 
-            path="/profile" 
-            element={
-              <ProtectedRoute>
-                <Profile />
-              </ProtectedRoute>
-            } 
-          />
-          {/* New profile setup page - for both new users and profile editing */}
-          <Route 
-            path="/profile-setup" 
-            element={
-              <ProfilePage />
-            } 
-          />
-          {/* Settings page - for authenticated users */}
-          <Route 
-            path="/settings" 
-            element={
-              <ProtectedRoute>
-                <Settings />
-              </ProtectedRoute>
-            } 
-          />
-          {/* Search page - accessible to both authenticated and non-authenticated users */}
-          <Route 
-            path="/search" 
-            element={<Search />} 
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Box>
+        {/* Admin Routes */}
+        <Route path="/login/admin" element={<AdminLogin />} />
+        <Route path="/admin/dashboard" element={
+          <ProtectedAdminRoute>
+            <Dashboard />
+          </ProtectedAdminRoute>
+        } />
+      </Routes>
       <Footer />
-    </Box>
+    </>
   );
 };
 
@@ -330,11 +289,14 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <AuthProvider>
-        <Router>
-          <AppContent />
-        </Router>
-      </AuthProvider>
+      <Router>
+        <AuthProvider>
+          <AdminAuthProvider>
+            <HandleOAuthRedirect />
+            <AppContent />
+          </AdminAuthProvider>
+        </AuthProvider>
+      </Router>
     </ThemeProvider>
   );
 }
