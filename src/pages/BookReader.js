@@ -88,7 +88,7 @@ function BookReader() {
   const [musicSource, setMusicSource] = useState('generated');
 
   // Add a specific debug flag to disable music to ensure reading works properly
-  const DEBUG_DISABLE_MUSIC = true; // Set to false if you want to enable music again
+  const DEBUG_DISABLE_MUSIC = false; // Set to false to enable music generation
 
   // Extract bookmark parameter from URL
   const bookmarkParam = new URLSearchParams(location.search).get('bookmark');
@@ -1088,11 +1088,21 @@ function BookReader() {
             value={targetPage}
             onChange={handleTargetPageChange}
             onKeyPress={handleKeyPress}
-            sx={{ width: '70px', mx: 1 }}
+            sx={{ 
+              width: '100px',  // Increased width to accommodate the Go button
+              mx: 1,
+              '& .MuiInputBase-root': {
+                pr: 0.5, // Reduce padding on the right side
+              }
+            }}
             InputProps={{
               endAdornment: (
                 <InputAdornment position="end">
-                  <Button size="small" onClick={goToPage}>
+                  <Button 
+                    size="small" 
+                    onClick={goToPage}
+                    sx={{ minWidth: '40px' }}
+                  >
                     Go
                   </Button>
                 </InputAdornment>
@@ -1163,22 +1173,82 @@ function BookReader() {
         </Menu>
       </Paper>
       
-      {/* Font size controls */}
-      <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center', gap: 2 }}>
-        <Tooltip title="Decrease font size">
-          <IconButton onClick={zoomOut}>
-            <ZoomOutIcon />
-          </IconButton>
-        </Tooltip>
-        <Typography sx={{ display: 'flex', alignItems: 'center' }}>
-          Font Size: {fontSize}px
-        </Typography>
-        <Tooltip title="Increase font size">
-          <IconButton onClick={zoomIn}>
-            <ZoomInIcon />
-          </IconButton>
-        </Tooltip>
+      {/* Font size and music controls */}
+      <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Tooltip title="Decrease font size">
+            <IconButton onClick={zoomOut}>
+              <ZoomOutIcon />
+            </IconButton>
+          </Tooltip>
+          <Typography sx={{ display: 'flex', alignItems: 'center' }}>
+            Font Size: {fontSize}px
+          </Typography>
+          <Tooltip title="Increase font size">
+            <IconButton onClick={zoomIn}>
+              <ZoomInIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
+        
+        {/* Music controls */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Tooltip title="Generate music for this page">
+            <span>
+              <IconButton 
+                color="primary" 
+                onClick={generateMusicForCurrentPage} 
+                disabled={generatingMusic || DEBUG_DISABLE_MUSIC}
+              >
+                <MusicNoteIcon />
+              </IconButton>
+            </span>
+          </Tooltip>
+          
+          {musicUrl && (
+            <>
+              <Tooltip title={isPlaying ? "Pause music" : "Play music"}>
+                <IconButton onClick={togglePlay} disabled={!musicUrl}>
+                  {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title={isMuted ? "Unmute" : "Mute"}>
+                <IconButton onClick={toggleMute} disabled={!musicUrl}>
+                  {isMuted ? <VolumeMuteIcon /> : <VolumeDownIcon />}
+                </IconButton>
+              </Tooltip>
+              
+              <Slider
+                size="small"
+                value={volume}
+                min={0}
+                max={1}
+                step={0.1}
+                onChange={handleVolumeChange}
+                sx={{ width: 100, mx: 1 }}
+                disabled={!musicUrl}
+              />
+              
+              <Tooltip title={loopMusic ? "Turn off loop" : "Turn on loop"}>
+                <IconButton onClick={toggleLoop} disabled={!musicUrl}>
+                  {loopMusic ? <RepeatOneIcon /> : <RepeatIcon />}
+                </IconButton>
+              </Tooltip>
+            </>
+          )}
+        </Box>
       </Box>
+      
+      {/* Audio element */}
+      {musicUrl && (
+        <audio
+          ref={audioRef}
+          src={musicUrl}
+          loop={loopMusic}
+          style={{ display: 'none' }}
+        />
+      )}
       
       {/* Bookmark success/error snackbar */}
       <Snackbar
