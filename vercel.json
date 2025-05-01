@@ -12,6 +12,10 @@
     "api/generate-music.js": {
       "memory": 3008,
       "maxDuration": 60
+    },
+    "api/admin-login.js": {
+      "memory": 1024,
+      "maxDuration": 10
     }
   },
   "rewrites": [
@@ -19,6 +23,7 @@
     { "source": "/api/read", "destination": "/api/read.js" },
     { "source": "/api/read/:id", "destination": "/api/read.js" },
     { "source": "/api/generate-music", "destination": "/api/generate-music.js" },
+    { "source": "/api/admin/login", "destination": "/api/admin-login.js" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "buildCommand": "npm run build",
