@@ -29,7 +29,9 @@
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.11.1",
     "react-scripts": "5.0.1",
-    "storia": "file:"
+    "storia": "file:",
+    "node-cache": "^5.1.2",
+    "redis": "^4.6.13"
   },
   "devDependencies": {
     "concurrently": "^8.0.1",

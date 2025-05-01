@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Container, 
   Paper, 
@@ -19,7 +19,13 @@ import {
   Backdrop,
   useTheme,
   useMediaQuery,
-  Stack
+  Stack,
+  Menu,
+  MenuItem,
+  Snackbar,
+  ListItemIcon,
+  ListItemText,
+  InputAdornment
 } from '@mui/material';
 import VolumeDownIcon from '@mui/icons-material/VolumeDown';
 import VolumeUpIcon from '@mui/icons-material/VolumeUp';
@@ -31,10 +37,18 @@ import MusicNoteIcon from '@mui/icons-material/MusicNote';
 import VolumeMuteIcon from '@mui/icons-material/VolumeMute';
 import RepeatIcon from '@mui/icons-material/Repeat';
 import RepeatOneIcon from '@mui/icons-material/RepeatOne';
+import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase, getUserBookmarks, saveBookmark, deleteBookmark } from '../lib/supabase';
 
 function BookReader() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user, isAuthenticated } = useAuth();
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [content, setContent] = useState('');
@@ -54,6 +68,16 @@ function BookReader() {
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [pageContents, setPageContents] = useState({});
   const [loadingMessage, setLoadingMessage] = useState('Preparing your immersive reading experience...');
+  // Bookmark related states
+  const [bookmarks, setBookmarks] = useState([]);
+  const [selectedText, setSelectedText] = useState('');
+  const [selectionPosition, setSelectionPosition] = useState({ top: 0, left: 0 });
+  const [selectionMenuOpen, setSelectionMenuOpen] = useState(false);
+  const [bookmarkSnackbarOpen, setBookmarkSnackbarOpen] = useState(false);
+  const [bookmarkMessage, setBookmarkMessage] = useState('');
+  // Add state for highlighted bookmarks
+  const [highlightedBookmarks, setHighlightedBookmarks] = useState([]);
+  const contentRef = useRef(null);
   const audioRef = useRef(null);
   const nextPagesToGenerate = useRef([]);
   const MIN_PAGES_TO_LOAD = 3; // Base minimum pages to load
@@ -61,75 +85,302 @@ function BookReader() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const [musicSource, setMusicSource] = useState('generated');
 
-  // Initial load - fetch first few pages and start music generation
+  // Add a specific debug flag to disable music to ensure reading works properly
+  const DEBUG_DISABLE_MUSIC = true; // Set to false if you want to enable music again
+
+  // Extract bookmark parameter from URL
+  const bookmarkParam = new URLSearchParams(location.search).get('bookmark');
+
+  // Use a ref to track if we need to reapply highlighting when content changes
+  const contentChangeRef = useRef(false);
+
+  // Initialize page and fetch first content and load bookmarks
   useEffect(() => {
     const initialize = async () => {
       setInitialLoading(true);
       setLoadingMessage('Loading book content...');
       
       try {
-        // First, fetch basic book information to get total pages
-        const response = await fetch(`/api/read/${id}?page=0`);
-        if (!response.ok) {
-          throw new Error(`Error fetching book: ${response.status}`);
+        // First, fetch user bookmarks regardless of the bookmark parameter
+        if (isAuthenticated && user) {
+          try {
+            const { data: bookmarkData, error: bookmarkError } = await getUserBookmarks(user.id, id);
+            
+            if (bookmarkError) {
+              console.error('Error fetching bookmarks:', bookmarkError);
+            } else if (bookmarkData && Array.isArray(bookmarkData)) {
+              setBookmarks(bookmarkData);
+              setHighlightedBookmarks(bookmarkData.filter(bookmark => bookmark.selected_word));
+              
+              // Handle bookmark parameter now that we have the bookmarks
+              if (bookmarkParam === 'latest' && bookmarkData.length > 0) {
+                // Find the most recent bookmark for this book
+                const sortedBookmarks = [...bookmarkData].sort(
+                  (a, b) => new Date(b.created_at) - new Date(a.created_at)
+                );
+                
+                if (sortedBookmarks.length > 0) {
+                  const latestBookmark = sortedBookmarks[0];
+                  const bookmarkPage = latestBookmark.page_number || 0;
+                  
+                  // Set the page to the bookmarked page
+                  setPage(bookmarkPage);
+                  
+                  // Fetch content for the bookmarked page
+                  await fetchPageContent(bookmarkPage);
+                  
+                  // Remove the bookmark param from URL without refreshing the page
+                  const newUrl = window.location.pathname;
+                  window.history.replaceState({}, document.title, newUrl);
+                  
+                  // Show notification about bookmark
+                  setBookmarkMessage(`Resumed reading from page ${bookmarkPage + 1}`);
+                  setBookmarkSnackbarOpen(true);
+                  
+                  // Skip loading first page since we've loaded the bookmark page
+                  setInitialLoading(false);
+                  return;
+                }
+              } else if (bookmarkParam === 'true' && page) {
+                // This is for a specific page bookmark
+                const pageToLoad = page;
+                
+                // Fetch content for the specified page
+                await fetchPageContent(pageToLoad);
+                
+                // Update URL without the bookmark parameter
+                const params = new URLSearchParams(location.search);
+                params.delete('bookmark');
+                params.set('page', pageToLoad.toString());
+                const newUrl = `${window.location.pathname}?${params.toString()}`;
+                window.history.replaceState({}, document.title, newUrl);
+                
+                // Show notification about bookmark
+                setBookmarkMessage(`Opened page ${pageToLoad + 1}`);
+                setBookmarkSnackbarOpen(true);
+                
+                // Skip loading first page since we've loaded the bookmark page
+                setInitialLoading(false);
+                return;
+              }
+            }
+          } catch (err) {
+            console.error('Error during bookmark handling:', err);
+            // Continue to load the first page
+          }
         }
         
-        const data = await response.json();
-        if (!data.content || typeof data.content !== 'string') {
-          throw new Error('Invalid content received from the server');
+        // Fall back to loading the first page if bookmark navigation fails or isn't requested
+        await loadFirstPage();
+        
+        if (!DEBUG_DISABLE_MUSIC) {
+          // Skip music generation for testing
+          setLoadingMessage('Generating ambient music...');
+          await generateMusicForCurrentPage();
         }
-        
-        // Set the content directly instead of relying on state updates
-        const firstPageContent = data.content;
-        setTotalPages(data.totalPages);
-        
-        // Update states synchronously for the first page
-        setContent(firstPageContent);
-        // Create a new object to avoid state update issues
-        const initialPageContents = { [0]: firstPageContent };
-        setPageContents(initialPageContents);
-        
-        // Pre-fetch content for the first buffer of pages
-        setLoadingMessage('Pre-fetching initial pages...');
-        const totalPagesToBuffer = Math.min(MIN_PAGES_TO_LOAD, data.totalPages);
-        
-        // Fetch content for initial buffer (we already have page 0)
-        const contentPromises = [];
-        for (let i = 1; i < totalPagesToBuffer; i++) {
-          contentPromises.push(fetchAndStorePageContent(i, initialPageContents));
-        }
-        
-        await Promise.all(contentPromises);
-        
-        // Now initialPageContents contains all fetched pages
-        setPageContents({ ...initialPageContents });
-        
-        // Now that we have content, generate music for the first buffer of pages
-        setLoadingMessage('Generating initial ambient music...');
-        await generateMusicForInitialBuffer(initialPageContents, totalPagesToBuffer);
-        
-        // Queue up the next buffer of pages
-        queueNextBuffer(totalPagesToBuffer);
-        
       } catch (err) {
         console.error('Initialization error:', err);
         setError(`Failed to initialize: ${err.message}`);
       } finally {
-        // Final safety check - ensure we have content before removing loading screen
-        if (!content) {
-          const pageZeroContent = pageContents[0];
-          if (pageZeroContent && typeof pageZeroContent === 'string') {
-            setContent(pageZeroContent);
-          }
-        }
         setInitialLoading(false);
       }
     };
     
     initialize();
-  }, [id]);
+  }, [id, isAuthenticated, user, bookmarkParam, page, location.search]);
 
+  // Helper function to fetch page content
+  const fetchPageContent = async (pageNum) => {
+    const response = await fetch(`/api/read/${id}?page=${pageNum}`);
+    if (!response.ok) {
+      throw new Error(`Error fetching book: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    if (!data.content || typeof data.content !== 'string') {
+      throw new Error('Invalid content received from the server');
+    }
+    
+    // Set content and other data
+    setContent(data.content);
+    setTotalPages(data.totalPages);
+    
+    // Add to pageContents cache
+    setPageContents(prev => ({
+      ...prev,
+      [pageNum]: data.content
+    }));
+    
+    return data;
+  };
+
+  // Helper function to load the first page of the book
+  const loadFirstPage = async () => {
+    const response = await fetch(`/api/read/${id}?page=0`);
+    if (!response.ok) {
+      throw new Error(`Error fetching book: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    if (!data.content || typeof data.content !== 'string') {
+      throw new Error('Invalid content received from the server');
+    }
+    
+    setContent(data.content);
+    setTotalPages(data.totalPages);
+    
+    // Add to pageContents cache
+    setPageContents({
+      0: data.content
+    });
+  };
+
+  // Fetch bookmarks for current user and book
+  const fetchBookmarks = async () => {
+    if (!isAuthenticated || !user) return;
+    
+    try {
+      const { data, error } = await getUserBookmarks(user.id, id);
+        
+      if (error) throw error;
+      
+      if (data) {
+        setBookmarks(data);
+        // Set highlighted bookmarks to display in text
+        setHighlightedBookmarks(data.filter(bookmark => bookmark.selected_word));
+      }
+    } catch (err) {
+      console.error('Error fetching bookmarks:', err);
+    }
+  };
+  
+  // Add a bookmark
+  const addBookmark = async (selectedWord, selection) => {
+    if (!isAuthenticated || !user) {
+      setBookmarkMessage('Please log in to add bookmarks');
+      setBookmarkSnackbarOpen(true);
+      return;
+    }
+    
+    try {
+      const timestamp = new Date().toISOString();
+      
+      const newBookmark = {
+        user_id: user.id,
+        book_id: id,
+        page_number: page,
+        selected_word: selectedWord,
+        selection_context: selection,
+        created_at: timestamp,
+      };
+      
+      const { data, error } = await saveBookmark(newBookmark);
+        
+      if (error) throw error;
+      
+      // Update local state
+      if (data) {
+        const newBookmarkWithId = { ...newBookmark, id: data[0]?.id };
+        setBookmarks([...bookmarks, newBookmarkWithId]);
+        // Update highlighted bookmarks
+        setHighlightedBookmarks([...highlightedBookmarks, newBookmarkWithId]);
+        setBookmarkMessage('Bookmark added successfully');
+        setBookmarkSnackbarOpen(true);
+      }
+      
+      // Close the selection menu
+      handleSelectionMenuClose();
+    } catch (err) {
+      console.error('Error adding bookmark:', err);
+      setBookmarkMessage('Failed to add bookmark');
+      setBookmarkSnackbarOpen(true);
+    }
+  };
+  
+  // Remove a bookmark
+  const removeBookmark = async (bookmarkId) => {
+    if (!isAuthenticated || !user) return;
+    
+    try {
+      const { error } = await deleteBookmark(bookmarkId);
+        
+      if (error) throw error;
+      
+      // Update local state
+      setBookmarks(bookmarks.filter(bookmark => bookmark.id !== bookmarkId));
+      // Update highlighted bookmarks
+      setHighlightedBookmarks(highlightedBookmarks.filter(bookmark => bookmark.id !== bookmarkId));
+      setBookmarkMessage('Bookmark removed');
+      setBookmarkSnackbarOpen(true);
+    } catch (err) {
+      console.error('Error removing bookmark:', err);
+      setBookmarkMessage('Failed to remove bookmark');
+      setBookmarkSnackbarOpen(true);
+    }
+  };
+  
+  // Handle text selection
+  const handleTextSelection = () => {
+    const selection = window.getSelection();
+    
+    if (selection.toString().trim() === '') {
+      setSelectionMenuOpen(false);
+      return;
+    }
+    
+    // Get the selected text and its position
+    const selectedText = selection.toString().trim();
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    
+    setSelectedText(selectedText);
+    setSelectionPosition({
+      top: rect.top + window.scrollY,
+      left: rect.left + window.scrollX
+    });
+    
+    setSelectionMenuOpen(true);
+  };
+  
+  // Close the selection menu
+  const handleSelectionMenuClose = () => {
+    setSelectionMenuOpen(false);
+    setSelectedText('');
+  };
+  
+  // Handle bookmark from selection
+  const handleBookmarkSelection = () => {
+    const selection = window.getSelection();
+    const selectionContext = selection.toString();
+    const selectionWord = selection.toString().trim();
+    
+    addBookmark(selectionWord, selectionContext);
+  };
+
+  // Check if the current page has a bookmark
+  const hasBookmarkOnCurrentPage = () => {
+    return bookmarks.some(bookmark => bookmark.page_number === page);
+  };
+  
+  // Get bookmark for current page
+  const getCurrentPageBookmark = () => {
+    return bookmarks.find(bookmark => bookmark.page_number === page);
+  };
+  
+  // Toggle bookmark for the current page
+  const togglePageBookmark = () => {
+    const currentBookmark = getCurrentPageBookmark();
+    
+    if (currentBookmark) {
+      removeBookmark(currentBookmark.id);
+    } else {
+      // Add a bookmark for the whole page if no text is selected
+      addBookmark("Whole page", content);
+    }
+  };
+  
   // Helper function to fetch and store a page's content
   const fetchAndStorePageContent = async (pageNum, contentStore) => {
     try {
@@ -259,70 +510,58 @@ function BookReader() {
     }
   };
 
-  // Monitor page changes to maintain music playback and buffer management
+  // Monitor page changes to maintain book reading flow
   useEffect(() => {
     // Set the content from our cached page contents
     if (pageContents[page]) {
       setContent(pageContents[page]);
+      setLoading(false);
     } else {
       // If we don't have the content cached, fetch it
       setLoading(true);
-      fetchPage(page, true).then(pageContent => {
-        if (pageContent) {
-          setContent(pageContent);
-        }
-        setLoading(false);
-      }).catch(err => {
-        console.error(`Error loading page ${page}:`, err);
-        setError(`Failed to load page ${page + 1}`);
-        setLoading(false);
-      });
+      
+      fetch(`/api/read/${id}?page=${page}`)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`Error: ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          if (data.content) {
+            setContent(data.content);
+            
+            // Update page cache
+            setPageContents(prev => ({
+              ...prev,
+              [page]: data.content
+            }));
+            
+            // Update total pages if needed
+            if (data.totalPages && data.totalPages !== totalPages) {
+              setTotalPages(data.totalPages);
+            }
+          } else {
+            throw new Error('No content received from server');
+          }
+          setLoading(false);
+        })
+        .catch(err => {
+          console.error(`Error loading page ${page}:`, err);
+          setError(`Failed to load page ${page + 1}: ${err.message}`);
+          setLoading(false);
+        });
     }
     
-    // When page changes, check if we have cached music for this page
-    if (cachedMusic[page]) {
-      console.log(`Using cached music for page ${page}`);
-      
-      // Stop current audio if playing
-      if (audioRef.current && isPlaying) {
-        audioRef.current.pause();
-      }
-      
-      // Set the music URL for the current page
-      setMusicUrl(cachedMusic[page]);
-      
-      // Auto-play the cached music
-      setTimeout(() => {
-        if (audioRef.current) {
-          audioRef.current.volume = volume;
-          audioRef.current.play()
-            .then(() => setIsPlaying(true))
-            .catch(e => console.error('Auto-play failed:', e));
-        }
-      }, 500);
-    } else {
-      // If no cached music, generate it only if we have content
-      if (pageContents[page] && pageContents[page].trim()) {
-        // Pause any currently playing music before generating new music
-        if (audioRef.current && isPlaying) {
-          audioRef.current.pause();
-          setIsPlaying(false);
-        }
-        
-        // Clear the current music URL to avoid playing the wrong music
-        setMusicUrl(null);
-        
-        // Generate music for this page
-        generateMusicForCurrentPage();
-      }
+    // Only generate music if it's enabled
+    if (!DEBUG_DISABLE_MUSIC && !cachedMusic[page] && !generatingMusic) {
+      generateMusicForCurrentPage();
     }
     
-    // Always check and update the buffer when page changes
-    checkAndQueueNextBuffer();
+    // Log the current page for debugging
+    console.log(`Changed to page ${page + 1} of ${totalPages}`);
     
-    // Debug log the current music cache status
-    console.log(`Page changed to ${page}. Music cached for pages: ${Object.keys(cachedMusic).sort((a, b) => a - b).join(', ')}`);
-  }, [page]);
+  }, [page, id]);
 
   // Effect to handle the audio element's loop property
   useEffect(() => {
@@ -404,13 +643,16 @@ function BookReader() {
         throw new Error('No music URL returned from server');
       }
       
+      // Set the music source based on whether it was cached
+      setMusicSource(data.cached ? 'cached' : 'generated');
+      
       // Cache the music URL
       setCachedMusic(prev => ({
         ...prev,
         [pageNum]: data.musicUrl
       }));
       
-      console.log(`Music URL generated for page ${pageNum}`);
+      console.log(`Music URL ${data.cached ? 'retrieved from cache' : 'generated'} for page ${pageNum}`);
       
       // If this is the current page and we don't have music playing yet, set it
       if (pageNum === page) {
@@ -629,7 +871,8 @@ function BookReader() {
       return;
     }
     
-    setLoading(true);
+    // Instead of setLoading(true) which affects entire page, use a local state
+    setGeneratingMusic(true);
     setLoadingMessage('Generating music for current page...');
     
     try {
@@ -645,7 +888,7 @@ function BookReader() {
       console.error('Error in generateMusicForCurrentPage:', error);
       // Error is already displayed by the generateMusicForPage function
     } finally {
-      setLoading(false);
+      setGeneratingMusic(false);
     }
   };
 
@@ -738,337 +981,213 @@ function BookReader() {
     console.log(`Background generation running: ${backgroundGenerating}`);
   };
 
+  // Format date for display
+  const formatBookmarkDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  // Function to highlight bookmarked text in content
+  const highlightBookmarkedText = (text) => {
+    if (!text || !highlightedBookmarks || highlightedBookmarks.length === 0) return text;
+    
+    let highlightedText = text;
+    
+    try {
+      // Sort bookmarks by word length (longest first) to avoid nested highlights
+      const sortedBookmarks = [...highlightedBookmarks]
+        .filter(bookmark => bookmark && bookmark.selected_word && bookmark.selected_word.length > 0)
+        .sort((a, b) => (b.selected_word?.length || 0) - (a.selected_word?.length || 0));
+      
+      for (const bookmark of sortedBookmarks) {
+        if (!bookmark.selected_word) continue;
+        
+        // Create a marker with the bookmark's timestamp as tooltip
+        const dateDisplay = formatBookmarkDate(bookmark.created_at);
+        const replacementHtml = `<span class="bookmarked-text" data-bookmark-id="${bookmark.id}" title="Bookmarked on ${dateDisplay}">${bookmark.selected_word}</span>`;
+        
+        // Use a safer approach to replace the word while preserving case
+        // Escape special regex characters in the selected_word
+        const escapedWord = bookmark.selected_word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`(\\b${escapedWord}\\b)`, 'gi');
+        highlightedText = highlightedText.replace(regex, replacementHtml);
+      }
+      
+      return highlightedText;
+    } catch (err) {
+      console.error('Error highlighting text:', err);
+      return text; // Return original text if highlighting fails
+    }
+  };
+
+  // Update content highlighting when content or bookmarks change
+  useEffect(() => {
+    if (content && highlightedBookmarks.length > 0) {
+      contentChangeRef.current = true;
+      const contentElement = contentRef.current;
+      if (contentElement) {
+        // Force re-rendering of highlighted content
+        const highlightedContent = highlightBookmarkedText(content);
+        contentElement.innerHTML = highlightedContent;
+      }
+    }
+  }, [content, highlightedBookmarks]);
+
   if (initialLoading) {
     return (
-      <Backdrop
-        sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1, flexDirection: 'column' }}
-        open={true}
-      >
-        <CircularProgress color="inherit" size={60} />
-        <Typography variant="h6" sx={{ mt: 2 }}>
-          {loadingMessage}
-        </Typography>
-        {loadingProgress > 0 && (
-          <>
+      <Container maxWidth="lg" sx={{ my: 4 }}>
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '70vh'
+        }}>
+          <CircularProgress size={40} />
+          <Typography sx={{ mt: 2 }}>{loadingMessage}</Typography>
+          {loadingProgress > 0 && (
             <Box sx={{ width: '300px', mt: 2 }}>
               <LinearProgress variant="determinate" value={loadingProgress} />
             </Box>
-            <Typography variant="body2" sx={{ mt: 1 }}>
-              {loadingProgress}% complete
-            </Typography>
-          </>
-        )}
-      </Backdrop>
-    );
-  }
-
-  if (loading) {
-    return (
-      <Container sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-        <CircularProgress />
+          )}
+        </Box>
       </Container>
     );
   }
 
   if (error) {
     return (
-      <Container sx={{ mt: 4, px: isMobile ? 2 : 3 }}>
-        <Alert severity="error">{error}</Alert>
-        <Button variant="contained" sx={{ mt: 2 }} onClick={() => navigate('/')}>
-          Return Home
-        </Button>
-        <Button variant="outlined" sx={{ mt: 2, ml: isMobile ? 0 : 2, width: isMobile ? '100%' : 'auto' }} onClick={ensurePageContent}>
-          Retry Loading
-        </Button>
+      <Container maxWidth="lg" sx={{ my: 4 }}>
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {error}
+        </Alert>
       </Container>
     );
   }
 
-  // Guard against empty content
-  if (!content && !loading) {
-    return (
-      <Container sx={{ mt: 4, textAlign: 'center', px: isMobile ? 2 : 3 }}>
-        <Alert severity="warning">No content available for this page.</Alert>
-        <Button variant="contained" sx={{ mt: 2 }} onClick={ensurePageContent}>
-          Retry Loading Content
-        </Button>
-      </Container>
-    );
-  }
-
+  // Main reader view
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100%', mb: 6 }}>
-      <Container sx={{ mt: isMobile ? 1 : 2, pb: isMobile ? 2 : 4, position: 'relative', px: isMobile ? 1 : 3, flex: '1 0 auto' }} maxWidth="lg">
-        {/* Top Control Bar */}
-        <Paper elevation={3} sx={{ mb: isMobile ? 1 : 2 }}>
-          <Toolbar 
-            variant="dense" 
-            sx={{ 
-              display: 'flex', 
-              flexDirection: isMobile ? 'column' : 'row',
-              justifyContent: 'space-between',
-              py: isMobile ? 1 : 0
+    <Container maxWidth="lg" sx={{ my: 4 }}>
+      {/* Navigation controls */}
+      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Button
+          variant="outlined"
+          disabled={page <= 0}
+          onClick={prevPage}
+          startIcon={<ArrowBackIcon />}
+        >
+          Previous
+        </Button>
+        
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Typography variant="body2" sx={{ mr: 1 }}>
+            Page {page + 1} of {totalPages}
+          </Typography>
+          <TextField
+            size="small"
+            value={targetPage}
+            onChange={handleTargetPageChange}
+            onKeyPress={handleKeyPress}
+            sx={{ width: '70px', mx: 1 }}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <Button size="small" onClick={goToPage}>
+                    Go
+                  </Button>
+                </InputAdornment>
+              ),
             }}
-          >
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center',
-              width: isMobile ? '100%' : 'auto',
-              justifyContent: isMobile ? 'center' : 'flex-start',
-              mb: isMobile ? 1 : 0
-            }}>
-              <Tooltip title="Zoom out">
-                <IconButton onClick={zoomOut} disabled={fontSize <= 12} size={isMobile ? 'small' : 'medium'}>
-                  <ZoomOutIcon />
-                </IconButton>
-              </Tooltip>
-              <Typography variant="body2" sx={{ mx: 1 }}>
-                {fontSize}px
-              </Typography>
-              <Tooltip title="Zoom in">
-                <IconButton onClick={zoomIn} disabled={fontSize >= 28} size={isMobile ? 'small' : 'medium'}>
-                  <ZoomInIcon />
-                </IconButton>
-              </Tooltip>
-            </Box>
-            
-            {!isMobile && <Divider orientation="vertical" flexItem />}
-            {isMobile && <Divider sx={{ width: '100%', my: 1 }} />}
-            
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center',
-              flexWrap: isMobile ? 'wrap' : 'nowrap',
-              width: isMobile ? '100%' : 'auto',
-              justifyContent: isMobile ? 'center' : 'flex-start'
-            }}>
-              <Tooltip title={generatingMusic || backgroundGenerating ? "Music generation in progress..." : "Generate ambient music"}>
-                <span>
-                  <IconButton 
-                    onClick={generateMusicForCurrentPage} 
-                    disabled={generatingMusic || !pageContents[page]?.trim()}
-                    color={musicUrl ? "primary" : "default"}
-                    size={isMobile ? 'small' : 'medium'}
-                  >
-                    <MusicNoteIcon />
-                    {(generatingMusic || backgroundGenerating) && (
-                      <CircularProgress
-                        size={isMobile ? 18 : 24}
-                        sx={{
-                          position: 'absolute',
-                          top: '50%',
-                          left: '50%',
-                          marginTop: isMobile ? '-9px' : '-12px',
-                          marginLeft: isMobile ? '-9px' : '-12px',
-                        }}
-                      />
-                    )}
-                  </IconButton>
-                </span>
-              </Tooltip>
-              
-              {musicUrl && (
-                <>
-                  <Tooltip title={isPlaying ? "Pause" : "Play"}>
-                    <IconButton onClick={togglePlay} size={isMobile ? 'small' : 'medium'}>
-                      {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
-                    </IconButton>
-                  </Tooltip>
-                  
-                  <Tooltip title={loopMusic ? "Disable loop" : "Enable loop"}>
-                    <IconButton onClick={toggleLoop} color={loopMusic ? "primary" : "default"} size={isMobile ? 'small' : 'medium'}>
-                      {loopMusic ? <RepeatOneIcon /> : <RepeatIcon />}
-                    </IconButton>
-                  </Tooltip>
-                  
-                  <Tooltip title={isMuted ? "Unmute" : "Mute"}>
-                    <IconButton onClick={toggleMute} size={isMobile ? 'small' : 'medium'}>
-                      {isMuted ? <VolumeMuteIcon /> : <VolumeDownIcon />}
-                    </IconButton>
-                  </Tooltip>
-                  
-                  <Slider
-                    value={volume}
-                    onChange={handleVolumeChange}
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    sx={{ width: isMobile ? 80 : 100, mx: isMobile ? 0.5 : 1 }}
-                    size="small"
-                  />
-                </>
-              )}
-            </Box>
-          </Toolbar>
-        </Paper>
-
-        {/* Content Area */}
-        <Paper sx={{ 
+          />
+          <Tooltip title={hasBookmarkOnCurrentPage() ? "Remove bookmark" : "Add bookmark"}>
+            <IconButton onClick={togglePageBookmark} color="primary">
+              {hasBookmarkOnCurrentPage() ? <BookmarkIcon /> : <BookmarkBorderIcon />}
+            </IconButton>
+          </Tooltip>
+        </Box>
+        
+        <Button
+          variant="outlined"
+          disabled={page >= totalPages - 1}
+          onClick={nextPage}
+          endIcon={<ArrowForwardIcon />}
+        >
+          Next
+        </Button>
+      </Box>
+      
+      {/* Content */}
+      <Paper 
+        elevation={3} 
+        sx={{ 
           p: isMobile ? 2 : 4, 
           minHeight: isMobile ? '60vh' : '70vh',
-          borderRadius: isMobile ? 1 : 2
-        }}>
-          <Typography 
-            variant="body1" 
-            sx={{ 
-              whiteSpace: 'pre-line',
-              fontSize: `${fontSize}px`,
-              lineHeight: 1.6
-            }}
-          >
-            {content}
-          </Typography>
-        </Paper>
-
-        {/* Hidden audio element */}
-        {musicUrl && (
-          <audio 
-            ref={audioRef} 
-            src={musicUrl} 
-            loop={loopMusic}
-            volume={volume} 
-            onEnded={() => !loopMusic && setIsPlaying(false)} 
-          />
-        )}
-
-        {/* Bottom Navigation */}
-        <Paper elevation={3} sx={{ mt: isMobile ? 1 : 2, p: isMobile ? 1 : 2, borderRadius: isMobile ? 1 : 2 }}>
-          <Box sx={{ mb: isMobile ? 1 : 2 }}>
-            <LinearProgress 
-              variant="determinate" 
-              value={(page / (totalPages - 1)) * 100} 
-              sx={{ mb: 1, height: isMobile ? 6 : 8, borderRadius: 4 }}
-            />
-            <Typography variant="caption" color="text.secondary" align="center" display="block">
-              {Math.round((page / (totalPages - 1)) * 100)}% complete
-            </Typography>
-          </Box>
-          
-          <Box sx={{ 
-            display: 'flex', 
-            flexDirection: isMobile ? 'column' : 'row',
-            justifyContent: 'space-between', 
-            alignItems: 'center',
-            gap: isMobile ? 1 : 0
-          }}>
-            <Button 
-              variant="outlined" 
-              onClick={prevPage} 
-              disabled={page === 0}
-              fullWidth={isMobile}
-              size={isMobile ? 'small' : 'medium'}
-            >
-              Previous
-            </Button>
-            
-            <Box sx={{ 
-              display: 'flex', 
-              flexDirection: isMobile ? 'column' : 'row',
-              alignItems: 'center',
-              width: isMobile ? '100%' : 'auto',
-              gap: isMobile ? 1 : 0,
-              my: isMobile ? 1 : 0,
-              justifyContent: 'center'
-            }}>
-              <Typography sx={{ mr: isMobile ? 0 : 1, fontSize: isMobile ? '0.875rem' : '1rem' }}>
-                Page {page + 1} of {totalPages}
-              </Typography>
-              <Stack 
-                direction="row" 
-                spacing={1} 
-                alignItems="center"
-                sx={{ width: isMobile ? '100%' : 'auto' }}
-              >
-                <TextField
-                  size="small"
-                  placeholder="Go to page"
-                  value={targetPage}
-                  onChange={handleTargetPageChange}
-                  onKeyPress={handleKeyPress}
-                  sx={{ 
-                    width: isMobile ? '100%' : 100,
-                    '& .MuiInputBase-input': {
-                      textAlign: 'center',
-                      py: isMobile ? 0.5 : 1
-                    }
-                  }}
-                  inputProps={{ 
-                    'aria-label': 'Go to page'
-                  }}
-                />
-                <Button 
-                  size="small" 
-                  variant="outlined" 
-                  onClick={goToPage}
-                  sx={{ minWidth: isMobile ? '80px' : 'auto' }}
-                >
-                  Go
-                </Button>
-              </Stack>
-            </Box>
-            
-            <Button 
-              variant="outlined" 
-              onClick={nextPage} 
-              disabled={page >= totalPages - 1}
-              fullWidth={isMobile}
-              size={isMobile ? 'small' : 'medium'}
-            >
-              Next
-            </Button>
-          </Box>
-        </Paper>
-
-        {/* Error Alert */}
-        {error && (
-          <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
-        )}
-        
-        {/* Debug info - only for development */}
-        {process.env.NODE_ENV === 'development' && (
-          <Paper sx={{ mt: 2, p: 2, opacity: 0.8 }}>
-            <Typography variant="caption">Debug Info:</Typography>
-            <Typography variant="caption" component="div">
-              Cached Pages: {Object.keys(pageContents).length} | 
-              Cached Music: {Object.keys(cachedMusic).length} | 
-              Queue Size: {nextPagesToGenerate.current.length}
-            </Typography>
-          </Paper>
-        )}
-        
-        {/* Loading backdrop */}
-        <Backdrop
-          sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }}
-          open={initialLoading}
-        >
-          <Box sx={{ textAlign: 'center' }}>
-            <CircularProgress color="inherit" sx={{ mb: 2 }} />
-            <Typography variant="body1">{loadingMessage}</Typography>
-            {loadingProgress > 0 && (
-              <Box sx={{ width: '250px', mt: 2 }}>
-                <LinearProgress variant="determinate" value={loadingProgress} />
-                <Typography variant="caption" sx={{ mt: 1 }}>
-                  {loadingProgress}% complete
-                </Typography>
-              </Box>
-            )}
-          </Box>
-        </Backdrop>
-      </Container>
-      
-      {/* Audio player controls bar */}
-      <AppBar 
-        position="fixed" 
-        color="default" 
-        sx={{ 
-          top: 'auto', 
-          bottom: 0,
-          boxShadow: 3
+          borderRadius: isMobile ? 1 : 2,
+          position: 'relative'
         }}
       >
-        {/* ... existing AppBar content ... */}
-      </AppBar>
-    </Box>
+        <div className="reader-content">
+          <div 
+            ref={contentRef}
+            className="book-content"
+            style={{ 
+              fontSize: `${fontSize}px`, 
+              whiteSpace: 'pre-line', 
+              lineHeight: 1.6 
+            }}
+            onMouseUp={handleTextSelection}
+            onTouchEnd={handleTextSelection}
+            dangerouslySetInnerHTML={{ 
+              __html: highlightBookmarkedText(content) 
+            }}
+          />
+        </div>
+        
+        {/* Selection Menu */}
+        <Menu
+          open={selectionMenuOpen}
+          onClose={handleSelectionMenuClose}
+          anchorReference="anchorPosition"
+          anchorPosition={
+            selectionMenuOpen
+              ? { top: selectionPosition.top, left: selectionPosition.left }
+              : undefined
+          }
+        >
+          <MenuItem onClick={handleBookmarkSelection}>
+            <ListItemIcon>
+              <BookmarkIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Bookmark Selection</ListItemText>
+          </MenuItem>
+        </Menu>
+      </Paper>
+      
+      {/* Font size controls */}
+      <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center', gap: 2 }}>
+        <Tooltip title="Decrease font size">
+          <IconButton onClick={zoomOut}>
+            <ZoomOutIcon />
+          </IconButton>
+        </Tooltip>
+        <Typography sx={{ display: 'flex', alignItems: 'center' }}>
+          Font Size: {fontSize}px
+        </Typography>
+        <Tooltip title="Increase font size">
+          <IconButton onClick={zoomIn}>
+            <ZoomInIcon />
+          </IconButton>
+        </Tooltip>
+      </Box>
+      
+      {/* Bookmark success/error snackbar */}
+      <Snackbar
+        open={bookmarkSnackbarOpen}
+        autoHideDuration={4000}
+        onClose={() => setBookmarkSnackbarOpen(false)}
+        message={bookmarkMessage}
+      />
+    </Container>
   );
 }
 

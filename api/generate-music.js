@@ -1,12 +1,23 @@
 require('dotenv').config();
 const axios = require('axios');
+const { createClient } = require('@supabase/supabase-js');
+
+// Create Supabase client with service role key for admin access to storage
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+// Define bucket name
+const MUSIC_BUCKET = 'music-cache';
 
 // Validate required environment variables
 const requiredEnvVars = [
   'OPENAI_API_KEY',
   'OPENAI_API_ENDPOINT',
   'ELEVENLABS_API_KEY', 
-  'ELEVENLABS_API_ENDPOINT'
+  'ELEVENLABS_API_ENDPOINT',
+  'REACT_APP_SUPABASE_URL',
+  'SUPABASE_SERVICE_ROLE'
 ];
 
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
@@ -65,6 +76,89 @@ const retryWithBackoff = async (fn, maxRetries = 3, initialDelay = 1000) => {
   throw lastError;
 };
 
+/**
+ * Check if music file exists in Supabase storage
+ * @param {string} bookId - Book ID
+ * @param {number} pageId - Page number
+ * @returns {Promise<string|null>} - URL of the music file if it exists, null otherwise
+ */
+const checkMusicInStorage = async (bookId, pageId) => {
+  try {
+    if (!bookId || pageId === undefined) {
+      console.error('Invalid parameters for checkMusicInStorage', { bookId, pageId });
+      return null;
+    }
+
+    const filePath = `${bookId}/${pageId}.mp3`;
+    
+    // Check if file exists
+    const { data, error } = await supabase
+      .storage
+      .from(MUSIC_BUCKET)
+      .createSignedUrl(filePath, 3600); // 1 hour expiry
+    
+    if (error) {
+      console.error('Error checking music in storage:', error);
+      return null;
+    }
+    
+    console.log(`Found cached music for Book: ${bookId}, Page: ${pageId}`);
+    return data?.signedUrl || null;
+  } catch (error) {
+    console.error('Error checking music in storage:', error);
+    return null;
+  }
+};
+
+/**
+ * Save music data to Supabase storage
+ * @param {string} bookId - Book ID
+ * @param {number} pageId - Page number
+ * @param {Buffer} musicData - Music data as Buffer
+ * @returns {Promise<string|null>} - URL of the saved music file, or null on error
+ */
+const saveMusicToStorage = async (bookId, pageId, musicData) => {
+  try {
+    if (!bookId || pageId === undefined || !musicData) {
+      console.error('Invalid parameters for saveMusicToStorage', { bookId, pageId });
+      return null;
+    }
+
+    const filePath = `${bookId}/${pageId}.mp3`;
+    
+    // Upload the file
+    const { error: uploadError } = await supabase
+      .storage
+      .from(MUSIC_BUCKET)
+      .upload(filePath, musicData, {
+        contentType: 'audio/mpeg',
+        upsert: true // Overwrite if exists
+      });
+    
+    if (uploadError) {
+      console.error('Error uploading music file:', uploadError);
+      return null;
+    }
+    
+    // Get the public URL
+    const { data, error } = await supabase
+      .storage
+      .from(MUSIC_BUCKET)
+      .createSignedUrl(filePath, 3600); // 1 hour expiry
+    
+    if (error) {
+      console.error('Error getting signed URL:', error);
+      return null;
+    }
+    
+    console.log(`Successfully saved music to storage for Book: ${bookId}, Page: ${pageId}`);
+    return data?.signedUrl || null;
+  } catch (error) {
+    console.error('Error saving music to storage:', error);
+    return null;
+  }
+};
+
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -78,6 +172,19 @@ module.exports = async (req, res) => {
     }
 
     console.log(`Received request for music generation - Book: ${bookId || 'Unknown'}, Page: ${pageId || 'Unknown'}`);
+    
+    // First, check if we already have this music cached in Supabase
+    if (bookId && pageId !== undefined) {
+      const cachedMusicUrl = await checkMusicInStorage(bookId, pageId);
+      
+      if (cachedMusicUrl) {
+        console.log(`Using cached music from Supabase storage for Book: ${bookId}, Page: ${pageId}`);
+        return res.json({ musicUrl: cachedMusicUrl, cached: true });
+      }
+      
+      console.log(`No cached music found, generating new music for Book: ${bookId}, Page: ${pageId}`);
+    }
+
     console.log('Text sample:', text.substring(0, 100) + '...');
 
     // Set a timeout to handle long-running operations
@@ -95,17 +202,20 @@ module.exports = async (req, res) => {
     // OpenAI API call to generate ambiance prompt
     const generateAmbiance = async () => {
       try {
+        const systemPrompt = process.env.OPENAI_SYSTEM_PROMPT || 
+          `You are an expert at analyzing text and extracting emotional mood and setting details.
+          Create a concise prompt (max 50 words) for generating INSTRUMENTAL background ambiance music that matches the emotional mood and setting of the text. Focus on:
+          - The dominant emotional mood (e.g., joyful, tense, melancholic)
+          - The setting or environment if described 
+          - Key ambient elements
+          - SPECIFY CLEARLY: NO VOCALS, INSTRUMENTAL ONLY, BACKGROUND/AMBIENT SOUND ONLY`;
+
         const response = await axios.post(process.env.OPENAI_API_ENDPOINT, {
           model: 'gpt-4',
           messages: [
             { 
               role: 'system', 
-              content: process.env.OPENAI_SYSTEM_PROMPT || `You are an expert at analyzing text and extracting emotional mood and setting details.
-              Create a concise prompt (max 50 words) for generating background ambiance music that matches the emotional mood and setting of the text. Focus on:
-              - The dominant emotional mood (e.g., joyful, tense, melancholic)
-              - The setting or environment if described 
-              - Key ambient elements
-              - NO vocals, instrumental only`
+              content: systemPrompt
             },
             { role: 'user', content: promptContext + text.substring(0, 800) } // Limit text to reduce tokens
           ],
@@ -151,6 +261,12 @@ module.exports = async (req, res) => {
     
     console.log('ElevenLabs prompt:', elevenLabsPrompt);
     
+    // Explicitly append a note about no vocals if not present
+    if (!elevenLabsPrompt.toLowerCase().includes('no vocal') && 
+        !elevenLabsPrompt.toLowerCase().includes('instrumental')) {
+      elevenLabsPrompt += " (NO VOCALS, INSTRUMENTAL ONLY)";
+    }
+    
     // ElevenLabs API call to generate music
     // Add page and book identifiers to request for better variation
     const musicPrompt = `${elevenLabsPrompt} (Book:${bookId || 'Unknown'}, Page:${pageId || 'Unknown'})`;
@@ -166,7 +282,7 @@ module.exports = async (req, res) => {
           throw new Error('ELEVENLABS_API_KEY is missing or empty');
         }
 
-        // Make API request with correct header format
+        // Make API request with correct header format and endpoint
         const response = await axios.post(process.env.ELEVENLABS_API_ENDPOINT, {
           text: musicPrompt
         }, {
@@ -228,34 +344,48 @@ module.exports = async (req, res) => {
       timeoutPromise
     ]);
 
-    // Convert the audio buffer to base64
-    const audioBase64 = Buffer.from(musicData).toString('base64');
-    const musicUrl = `data:audio/mpeg;base64,${audioBase64}`;
+    let musicUrl;
     
-    console.log(`Successfully generated music data URL for Book: ${bookId || 'Unknown'}, Page: ${pageId || 'Unknown'}`);
+    // If we have both bookId and pageId, save to Supabase storage
+    if (bookId && pageId !== undefined) {
+      // Try to save to Supabase
+      const storedUrl = await saveMusicToStorage(bookId, pageId, musicData);
+      
+      if (storedUrl) {
+        musicUrl = storedUrl;
+        console.log(`Using Supabase storage URL for Book: ${bookId}, Page: ${pageId}`);
+      } else {
+        // Fallback to data URL if storage fails
+        console.log(`Falling back to data URL for Book: ${bookId}, Page: ${pageId}`);
+        const audioBase64 = Buffer.from(musicData).toString('base64');
+        musicUrl = `data:audio/mpeg;base64,${audioBase64}`;
+      }
+    } else {
+      // Convert the audio buffer to base64 (fallback for when book/page IDs aren't provided)
+      const audioBase64 = Buffer.from(musicData).toString('base64');
+      musicUrl = `data:audio/mpeg;base64,${audioBase64}`;
+    }
+    
+    console.log(`Successfully generated music for Book: ${bookId || 'Unknown'}, Page: ${pageId || 'Unknown'}`);
 
-    res.json({ musicUrl });
+    res.json({ musicUrl, cached: false });
   } catch (error) {
     console.error('Error in music generation process:', error.message);
     
     // Create a more user-friendly error message based on the error type
-    let userMessage = 'Failed to generate music';
-    let statusCode = 500;
+    let userMessage = 'An error occurred generating music. Please try again.';
     
-    if (error.message.includes('API key')) {
-      userMessage = 'Authentication error with music service. Please check API configuration.';
-      statusCode = 401;
-    } else if (error.message.includes('timeout') || error.message.includes('ECONNABORTED')) {
+    if (error.message === 'Operation timed out') {
       userMessage = 'Music generation timed out. Please try again later.';
-      statusCode = 504;
-    } else if (error.message.includes('rate limit')) {
-      userMessage = 'Music service rate limit exceeded. Please try again in a few minutes.';
-      statusCode = 429;
+    } else if (error.message.includes('API key')) {
+      userMessage = 'Authentication error with music service. Please check API configuration.';
+    } else if (error.message.includes('rate limit') || error.message.includes('429')) {
+      userMessage = 'Music service rate limit reached. Please try again in a few minutes.';
     }
     
-    res.status(statusCode).json({ 
-      error: userMessage, 
-      details: error.message
+    res.status(500).json({ 
+      error: userMessage,
+      details: error.message 
     });
   }
 }; 

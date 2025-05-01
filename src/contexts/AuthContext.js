@@ -5,6 +5,19 @@ const AuthContext = createContext();
 
 export const useAuth = () => useContext(AuthContext);
 
+// Helper function to get the appropriate redirect URL
+const getRedirectUrl = () => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  // Always use the production URL in production mode
+  if (isProduction) {
+    return 'https://joinstoria.vercel.app';
+  }
+  
+  // In development, use the current origin
+  return window.location.origin;
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -99,6 +112,9 @@ export const AuthProvider = ({ children }) => {
           
           // Remove the hash from the URL without reloading
           window.history.replaceState(null, '', window.location.pathname);
+          
+          // Redirect to the home page after successful sign-in
+          window.location.href = getRedirectUrl();
         }
       } catch (err) {
         console.error('Exception processing OAuth redirect:', err);
@@ -150,6 +166,12 @@ export const AuthProvider = ({ children }) => {
               
               // Check profile status for new sign-in
               await checkProfileStatus(session.user.id);
+              
+              // Redirect to the home page after successful sign-in
+              // Use a small delay to ensure state updates happen first
+              setTimeout(() => {
+                window.location.href = getRedirectUrl();
+              }, 300);
             } else if (event === 'SIGNED_OUT') {
               console.log('User signed out');
               setUser(null);
@@ -189,9 +211,13 @@ export const AuthProvider = ({ children }) => {
       console.log('Starting Google sign-in process');
       console.log('Environment:', process.env.NODE_ENV);
       
-      // CRITICAL: Always use absolute URLs with https:// for production
-      // This must match exactly what's registered in Google Cloud Console
-      const redirectTo = 'https://joinstoria.vercel.app/auth/callback'; // Always use production URL
+      // Get the appropriate redirect URL based on environment
+      const redirectBase = getRedirectUrl();
+      // Make sure the callback URL is correct - must match what's registered in Google Cloud
+      // In production, this should be the full https URL
+      const redirectTo = process.env.NODE_ENV === 'production' 
+        ? 'https://joinstoria.vercel.app/auth/callback'
+        : `${redirectBase}/auth/callback`;
       
       console.log('Using redirect URL:', redirectTo);
       
@@ -228,6 +254,7 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated: !!user,
     checkProfileStatus,
     signInWithGoogle,
+    setUser,
     error
   };
 

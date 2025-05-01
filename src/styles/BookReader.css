@@ -613,4 +613,35 @@
   .reader-settings-panel {
     width: calc(100% - 40px);
   }
+}
+
+/* Bookmarked text styling */
+.bookmarked-text {
+  background-color: rgba(156, 39, 176, 0.2);
+  border-bottom: 2px solid #9c27b0;
+  padding: 2px 0;
+  cursor: help;
+  position: relative;
+  display: inline-block;
+}
+
+.bookmarked-text:hover {
+  background-color: rgba(156, 39, 176, 0.3);
+}
+
+.bookmarked-text:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #241f35;
+  color: #f4e4bc;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  z-index: 100;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(156, 39, 176, 0.5);
 } 
