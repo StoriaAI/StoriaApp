@@ -20,18 +20,20 @@
     "@supabase/supabase-js": "^2.49.4",
     "@vercel/node": "^3.0.19",
     "axios": "^1.4.0",
+    "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
     "http-proxy-middleware": "^2.0.7",
+    "jsonwebtoken": "^9.0.2",
+    "node-cache": "^5.1.2",
     "openai": "^4.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.11.1",
     "react-scripts": "5.0.1",
-    "storia": "file:",
-    "node-cache": "^5.1.2",
-    "redis": "^4.6.13"
+    "redis": "^4.6.13",
+    "storia": "file:"
   },
   "devDependencies": {
     "concurrently": "^8.0.1",
