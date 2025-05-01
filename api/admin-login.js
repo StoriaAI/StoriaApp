@@ -6,6 +6,12 @@ require('dotenv').config();
 // Initialize Supabase client
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+// Debug output
+console.log('Supabase URL:', supabaseUrl);
+console.log('Service Role Key exists:', !!supabaseServiceKey);
+console.log('JWT Secret exists:', !!process.env.JWT_SECRET);
+
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 module.exports = async (req, res) => {
@@ -26,6 +32,7 @@ module.exports = async (req, res) => {
   }
 
   try {
+    console.log('Request body:', JSON.stringify(req.body));
     const { username, password } = req.body;
 
     // Validate input
@@ -34,23 +41,30 @@ module.exports = async (req, res) => {
     }
 
     // Fetch admin user from database
+    console.log('Fetching admin user for username:', username);
     const { data: adminUser, error } = await supabase
       .from('admin_users')
       .select('*')
       .eq('username', username)
       .single();
 
+    console.log('Supabase response:', adminUser ? 'User found' : 'User not found', error ? `Error: ${error.message}` : 'No error');
+
     if (error || !adminUser) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     // Compare password with hashed password in database
+    console.log('Comparing passwords');
     const isMatch = await bcrypt.compare(password, adminUser.password);
+    console.log('Password match:', isMatch);
+    
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     // Generate JWT token
+    console.log('Generating JWT token');
     const token = jwt.sign(
       { id: adminUser.id, username: adminUser.username },
       process.env.JWT_SECRET,
@@ -67,6 +81,6 @@ module.exports = async (req, res) => {
     });
   } catch (error) {
     console.error('Error in admin login:', error);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: 'Server error', details: error.message });
   }
 }; 
