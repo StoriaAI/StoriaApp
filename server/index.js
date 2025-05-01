@@ -24,7 +24,7 @@ async function getBookById(bookId) {
 // Fetches a list of books (or a specific book if ?id= is provided) from Gutendex
 app.get('/api/books', async (req, res) => {
   try {
-    const { search = '', page = 1, id } = req.query;
+    const { search = '', page = 1, id, raw = false } = req.query;
     const baseUrl = 'https://gutendex.com/books';
     const params = new URLSearchParams();
     if (id) {
@@ -34,6 +34,12 @@ app.get('/api/books', async (req, res) => {
       if (page) params.append('page', page);
     }
     const response = await axios.get(`${baseUrl}?${params.toString()}`);
+    
+    // If raw parameter is true, return the unmodified Gutendex response
+    if (raw === true || raw === 'true') {
+      return res.json(response.data);
+    }
+    
     // Transform results: try to pick a prioritized text format URL
     const transformedResults = response.data.results.map(book => {
       const formatPriorities = [

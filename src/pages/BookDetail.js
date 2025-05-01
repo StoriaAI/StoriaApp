@@ -140,8 +140,9 @@ function BookDetail() {
         // Set the book data
         setBook(data.results[0]);
         
-        // Fetch raw data directly from Gutendex to get all formats and subjects
-        const rawResponse = await fetch(`https://gutendex.com/books?ids=${id}`);
+        // Use our own API endpoint instead of calling Gutendex directly
+        // This fixes potential CORS issues
+        const rawResponse = await fetch(`/api/books?id=${id}&raw=true`);
         if (rawResponse.ok) {
           const rawData = await rawResponse.json();
           if (rawData.results && rawData.results.length) {

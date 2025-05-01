@@ -52,7 +52,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const { search = '', page = 1, id } = req.query;
+    const { search = '', page = 1, id, raw = false } = req.query;
     const baseUrl = 'https://gutendex.com/books';
     const params = new URLSearchParams();
     
@@ -66,7 +66,7 @@ module.exports = async (req, res) => {
 
     // Generate cache key based on query parameters
     const queryString = params.toString();
-    const cacheKey = `books:${queryString}`;
+    const cacheKey = `books:${queryString}:${raw ? 'raw' : 'transformed'}`;
     
     // Check cache first
     const cachedData = await cache.get(cacheKey);
@@ -86,6 +86,13 @@ module.exports = async (req, res) => {
       },
       timeout: 10000 // 10 second timeout
     });
+
+    // If raw parameter is true, return the unmodified Gutendex response
+    if (raw === true || raw === 'true') {
+      // Cache the raw response
+      await cache.set(cacheKey, response.data, BOOK_CACHE_TTL);
+      return res.status(200).json(response.data);
+    }
 
     // Transform API results to our simplified format
     const transformedResults = response.data.results
